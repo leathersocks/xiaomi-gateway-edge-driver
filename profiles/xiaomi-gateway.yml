@@ -1,0 +1,70 @@
+name: xiaomi-gateway
+components:
+- id: main
+  capabilities:
+  - id: locketforest19027.xiaomiGatewayStatus
+    version: 1
+  - id: locketforest19027.xiaomiGatewayIp
+    version: 1
+  - id: locketforest19027.xiaomiGatewayLatency
+    version: 1
+  - id: locketforest19027.xiaomiGatewayLastSeen
+    version: 1
+  - id: locketforest19027.xiaomiGatewayFailures
+    version: 1
+  - id: healthCheck
+    version: 1
+  - id: presenceSensor
+    version: 1
+  - id: refresh
+    version: 1
+  categories:
+  - name: Hub
+preferences:
+- title: Gateway IP address
+  name: gatewayIp
+  description: IPv4 address used for the Xiaomi miIO UDP health check.
+  required: false
+  preferenceType: string
+  definition:
+    minLength: 0
+    maxLength: 64
+    stringType: text
+    default: ''
+- title: Health check interval (seconds)
+  name: checkInterval
+  description: How often the driver checks the gateway over UDP 54321.
+  required: false
+  preferenceType: integer
+  definition:
+    minimum: 30
+    maximum: 3600
+    default: 60
+- title: Probe timeout (seconds)
+  name: probeTimeout
+  description: How long to wait for a miIO hello response.
+  required: false
+  preferenceType: integer
+  definition:
+    minimum: 1
+    maximum: 10
+    default: 3
+- title: Offline after consecutive failures
+  name: failureThreshold
+  description: Number of consecutive failed probes before the device is marked offline.
+  required: false
+  preferenceType: integer
+  definition:
+    minimum: 1
+    maximum: 5
+    default: 3
+- title: Installation note
+  name: installationNote
+  description: Optional room, location, or purpose.
+  required: false
+  preferenceType: string
+  definition:
+    minLength: 0
+    maxLength: 128
+    stringType: text
+    default: ''

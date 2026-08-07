@@ -1,0 +1,29 @@
+{
+  "id": "xiaomiGatewayStatus",
+  "version": 1,
+  "status": "proposed",
+  "name": "Status",
+  "attributes": {
+    "gatewayStatus": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string",
+            "enum": [
+              "online",
+              "degraded",
+              "offline"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "value"
+        ]
+      },
+      "enumCommands": []
+    }
+  },
+  "commands": {}
+}

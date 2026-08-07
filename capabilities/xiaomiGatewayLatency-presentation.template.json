@@ -1,0 +1,24 @@
+{
+  "dashboard": {
+    "states": [
+      {
+        "label": "{{latencyMs.value}} ms"
+      }
+    ],
+    "actions": [],
+    "basicPlus": []
+  },
+  "detailView": [
+    {
+      "label": "{{i18n.label}}",
+      "displayType": "state",
+      "state": {
+        "label": "{{latencyMs.value}} ms"
+      }
+    }
+  ],
+  "automation": {
+    "conditions": [],
+    "actions": []
+  }
+}

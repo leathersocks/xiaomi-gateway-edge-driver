@@ -1,0 +1,13 @@
+{
+  "tag": "ko",
+  "label": "Latency",
+  "attributes": {
+    "latencyMs": {
+      "label": "Latency",
+      "displayTemplate": "{{attribute}}: {{value}}",
+      "i18n": {
+        "value": {}
+      }
+    }
+  }
+}
