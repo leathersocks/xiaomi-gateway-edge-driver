@@ -6,6 +6,7 @@ local discovery = require "discovery"
 local gateways = require "gateways"
 local miio_probe = require "miio_probe"
 local diagnostics = require "diagnostics"
+local child_manager = require "child_manager"
 
 local DEFAULT_INTERVAL = 60
 local DEFAULT_TIMEOUT = 3
@@ -117,9 +118,11 @@ local function set_online(device, force)
   device:online()
   emit_presence(device, "present", force)
   emit_health(device, "online", force)
+  child_manager.set_children_reachable(device, true)
 end
 
 local function set_offline(device, force)
+  child_manager.set_children_reachable(device, false)
   emit_presence(device, "not present", force)
   emit_health(device, "offline", force)
   device:offline()
@@ -269,36 +272,85 @@ local function log_configuration(device)
   ))
 end
 
+local function is_gateway_device(device)
+  return child_manager.is_gateway(device, gateways)
+end
+
 local function added_handler(driver, device)
+  if not is_gateway_device(device) then
+    child_manager.initialize_child(device)
+    log.info(string.format(
+      "%s child added: parent_key=%s model=%s",
+      device.label,
+      tostring(device.parent_assigned_child_key or ""),
+      tostring(device.model or "")
+    ))
+    return
+  end
+
   log_configuration(device)
   diagnostics.emit_cached(device, get_ip(device))
+  child_manager.sync(driver, device)
   schedule_health_check(device)
   check_gateway(device, "added", true)
 end
 
 local function init_handler(driver, device)
+  if not is_gateway_device(device) then
+    child_manager.initialize_child(device)
+    return
+  end
+
   diagnostics.emit_cached(device, get_ip(device))
+  child_manager.sync(driver, device)
   schedule_health_check(device)
   check_gateway(device, "init", true)
 end
 
 local function info_changed_handler(driver, device, event, args)
+  if not is_gateway_device(device) then
+    return
+  end
+
   log_configuration(device)
   diagnostics.emit_cached(device, get_ip(device))
+  child_manager.sync(driver, device)
   schedule_health_check(device)
   check_gateway(device, "infoChanged", true)
 end
 
 local function removed_handler(driver, device)
-  cancel_health_timer(device)
+  if is_gateway_device(device) then
+    cancel_health_timer(device)
+  end
 end
 
 local function refresh_handler(driver, device, command)
-  check_gateway(device, "refresh", true)
+  if is_gateway_device(device) then
+    child_manager.sync(driver, device)
+    check_gateway(device, "refresh", true)
+    return
+  end
+
+  local ok, parent = pcall(function()
+    return device:get_parent_device()
+  end)
+
+  if ok and parent then
+    child_manager.sync(driver, parent)
+    check_gateway(parent, "child.refresh", true)
+  else
+    log.warn(string.format(
+      "%s child refresh ignored: parent device unavailable",
+      device.label
+    ))
+  end
 end
 
 local function health_ping_handler(driver, device, command)
-  check_gateway(device, "healthCheck.ping", true)
+  if is_gateway_device(device) then
+    check_gateway(device, "healthCheck.ping", true)
+  end
 end
 
 local driver = Driver("xiaomi-gateway-registration", {
