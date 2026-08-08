@@ -7,7 +7,7 @@ local diagnostics = require "diagnostics"
 local child_manager = require "child_manager"
 local auto_discovery = require "auto_discovery"
 local child_state = require "child_state"
-local mqtt_ble = require "mqtt_ble"
+local mqtt_ble = require "mqtt_isolated"
 local gateway_runtime = require "gateway_runtime"
 
 local DEFAULT_INTERVAL = 60
