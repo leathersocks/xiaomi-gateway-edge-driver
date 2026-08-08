@@ -1,0 +1,23 @@
+{
+  "tag": "ko-KR",
+  "label": "상태",
+  "attributes": {
+    "gatewayStatus": {
+      "label": "상태",
+      "displayTemplate": "{{attribute}}: {{value}}",
+      "i18n": {
+        "value": {
+          "online": {
+            "label": "연결됨"
+          },
+          "degraded": {
+            "label": "연결 불안정"
+          },
+          "offline": {
+            "label": "연결 안됨"
+          }
+        }
+      }
+    }
+  }
+}
