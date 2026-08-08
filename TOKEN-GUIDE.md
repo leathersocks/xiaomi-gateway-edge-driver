@@ -1,5 +1,7 @@
 # TOKEN 안내
 
+[English](TOKEN-GUIDE.en.md)
+
 SmartThings 설정에서 사용하는 항목 이름은 다음과 같습니다.
 
 ```text
