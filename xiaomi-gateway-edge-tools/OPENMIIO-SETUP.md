@@ -1,5 +1,7 @@
 # Xiaomi mgl03 openmiio / MQTT 설정 가이드
 
+[English](OPENMIIO-SETUP.en.md)
+
 이 문서는 **Xiaomi Mijia Smart Multi-Mode Gateway (`lumi.gateway.mgl03`)**에서 `openmiio_agent`와 MQTT Broker를 이용해 BLE 이벤트를 SmartThings Edge Driver로 전달하는 방법을 설명합니다.
 
 > 이 절차는 현재 저장소의 `install-openmiio-mgl03-v5.py`와 `mqtt-ble-probe-v2.py`를 기준으로 작성되었습니다.
