@@ -2,22 +2,62 @@
 
 [English](TOOTHBRUSH-SESSION.en.md)
 
-이 설계에는 실제 런타임에서 관찰한 다음 데이터를 사용했습니다.
+이 설계에는 실제 SmartThings Hub 런타임에서 관찰한 다음 데이터를 사용했습니다.
 
 ```text
-start:      type=0, live=true
-normal end: type=1, live=true, score present
-forced end: type!=0 가능, score 없을 수 있음
-battery:    separate standard MiBeacon event
+start:                 type=0, 현재 timestamp, live=true
+normal end:            type=1, 현재 timestamp, score present
+forced/early stop:     type=1, 이전 완료 세션 timestamp가 재사용될 수 있음
+battery:               separate standard MiBeacon event
 ```
 
-T700i의 MiBeacon 칫솔 이벤트(EID `0x3003`)는 `type=0`을 양치 시작으로 처리하고, **0이 아닌 이벤트 타입은 종료로 처리**합니다. 실제 정상 양치 종료에서는 `type=1`이 확인되었지만, 사용자가 동작 중 전원 버튼 등으로 강제/조기 정지하는 경우 다른 non-zero 종료 코드가 들어올 수 있습니다.
+T700i의 MiBeacon 칫솔 이벤트(EID `12291 / 0x3003`)는 `type=0`을 양치 시작으로 처리하고, **0이 아닌 이벤트 타입은 종료 후보**로 처리합니다.
 
-기존 구현은 종료를 `type=1`로만 제한하여 이런 강제 정지 패킷을 수신하고도 무시할 수 있었고, 그 결과 SmartThings의 `motionSensor`가 계속 `active`로 남는 문제가 있었습니다. v1.10.2부터는 모든 non-zero `0x3003` 이벤트를 종료로 처리하여 즉시 `motionSensor=inactive`로 반영합니다.
+v1.10.2에서는 모든 non-zero `0x3003` 이벤트를 종료로 처리하도록 확장했고, v1.10.3에서는 강제 정지 순간의 실제 BLE 패킷을 확인하기 위해 raw 진단 로그를 추가했습니다.
 
-또한 종료 패킷 자체가 유실되거나 해석할 수 없는 경우를 대비해 T700i 전용 30초 activity watchdog을 최종 안전망으로 유지합니다.
+v1.10.3 실제 강제정지 테스트에서 다음 패턴이 확인되었습니다.
 
-v1.10.3부터는 강제 정지 순간의 실제 MiBeacon 패킷 구조를 확인할 수 있도록 T700i 전용 raw 진단 로그를 추가했습니다. 이 로그는 자식 장치 조회 및 `frmCnt` 중복 억제보다 먼저 기록되므로, 동일 패킷이 여러 Gateway에서 수신되거나 상태 이벤트가 생성되지 않는 경우에도 원본 `EID`와 `edata`를 확인할 수 있습니다.
+```text
+start
+frmCnt=234
+gwts=1786207645
+edata=009b5d776a
+type=0
+event_ts=1786207643
+
+forced stop
+frmCnt=236
+gwts=1786207649
+edata=01b920776a
+type=1
+event_ts=1786192057
+```
+
+강제정지 패킷의 `type=1` 자체는 정상 종료와 같지만, 내장 `event_ts=1786192057`은 현재 종료 시각이 아니라 이전 정상 양치 완료 시각을 다시 사용했습니다. 이 때문에 기존 60초 live/history 필터에서는 강제정지 패킷이 과거 이벤트로 판정되어 즉시 `inactive`가 되지 않고 30초 watchdog으로만 복구되었습니다.
+
+## v1.10.4 stale-stop 처리
+
+v1.10.4부터는 다음 조건을 모두 만족하는 non-zero `0x3003` 패킷을 **현재 세션의 강제/조기 종료**로 추론합니다.
+
+- T700i 현재 세션이 `active`
+- 저장된 `start_ts > 0`
+- `type != 0`
+- 패킷의 내장 timestamp가 60초 live window 밖에 있음
+- Gateway 수신 시각 `gwts`가 현재 `start_ts` 이후임
+- `gwts - start_ts <= 10분`
+- `frmCnt` 중복 억제를 통과한 새 advertisement
+
+이 경우 원본 timestamp는 진단용으로 그대로 보존하고, 실제 상태·세션 계산에는 다음처럼 `gwts`를 유효 종료 시각으로 사용합니다.
+
+```text
+raw_event_ts       = 패킷에 포함된 이전 완료 timestamp
+effective_end_ts   = gwts
+duration           = effective_end_ts - start_ts
+motionSensor       = inactive
+watchdog           = invalidated
+```
+
+예를 들어 실제 관측 로그에서는 시작 `1786207643`, 강제정지 수신 `1786207649`이므로 예상 양치 시간은 약 6초입니다.
 
 ## 상태 머신
 
@@ -32,68 +72,76 @@ BRUSHING
   | keep first start timestamp
   | refresh 30s watchdog
   |
-  | live type!=0
-  | cancel watchdog
-  v
-IDLE + completed session
+  +---- live type!=0 ----------------------+
+  |                                         |
+  +---- stale type!=0 + active session -----+
+        use gwts as effective end timestamp
+                                            v
+                                  IDLE + completed session
 
 BRUSHING
   |
-  | no repeated type=0 advertisement
-  | and no decodable end event for 30s
+  | no decodable end advertisement for 30s
   v
 IDLE + watchdog fallback
 ```
 
-과거 종료 패킷은 저장된 기록보다 새로운 경우에만 메타데이터를 갱신할 수 있으며, 현재 상태를 `BRUSHING -> IDLE`로 변경하지 않습니다.
+세션이 active가 아닌 상태에서 들어오는 오래된 종료 패킷은 기존과 같이 현재 상태를 변경하지 않습니다. 따라서 단순 과거 재전송 패킷을 무조건 현재 종료 이벤트로 처리하지 않습니다.
 
-## 강제 정지 처리
+## 30초 watchdog
 
-- 새로운 `live type=0` 시작 이벤트를 받으면 `motionSensor=active`로 변경하고 30초 watchdog을 시작합니다.
-- 양치 중 반복되는 `type=0` 광고를 받으면 watchdog 제한 시간을 다시 30초로 갱신합니다.
-- 동일한 `frmCnt`의 중복 광고는 상태 이벤트 중복 처리는 하지 않지만, T700i가 계속 동작 중임을 나타내는 `type=0` 광고라면 watchdog은 갱신합니다.
-- `live type!=0` 이벤트를 받으면 T700i 종료 이벤트로 판단하고 watchdog을 무효화한 뒤 즉시 `motionSensor=inactive`로 변경합니다.
-- 정상 완료에서는 일반적으로 `type=1`과 점수가 함께 들어오며, 강제/조기 정지에서는 다른 non-zero type 또는 점수가 없는 종료 패킷이 들어올 수 있습니다.
-- 종료 패킷이 아예 수신되지 않으면 마지막 T700i `type=0` 활동 광고 이후 30초 뒤 watchdog이 `motionSensor=inactive`로 복구합니다.
-- watchdog fallback은 종료 시각·점수 같은 완료 세션 메타데이터를 임의로 만들지 않습니다. 이후 유효한 종료 기록이 들어오면 기존 메타데이터 갱신 규칙을 따릅니다.
+종료 advertisement 자체가 유실되거나 해석할 수 없는 경우를 대비해 T700i 전용 30초 activity watchdog을 최종 안전망으로 유지합니다.
+
+- 새로운 `live type=0` 시작 이벤트에서 watchdog 시작
+- 반복되는 `type=0` 광고에서 watchdog 갱신
+- 정상 live 종료 또는 v1.10.4 stale-stop 추론 성공 시 watchdog 즉시 무효화
+- 종료 패킷이 전혀 없으면 마지막 활동 이후 30초에 `motionSensor=inactive`
+- watchdog fallback은 종료 시각·점수 같은 완료 메타데이터를 임의로 만들지 않음
 
 ## Raw BLE 진단 로그
 
-v1.10.3 이상에서는 `pdid=6032` 패킷을 받을 때 다음 형식의 로그가 먼저 기록됩니다.
+v1.10.3 이상에서는 `pdid=6032` 패킷을 자식 장치 조회 및 `frmCnt` 중복 억제보다 먼저 기록합니다.
 
 ```text
 BLE MQTT T700i RAW: topic=miio/report did=... mac=... pdid=6032 frmCnt=... gwts=... events=[#1 eid=... eid_hex=... edata=... bytes=... type=... event_ts=...]
 ```
 
-확인할 주요 항목은 다음과 같습니다.
+주요 필드:
 
-- `source label`: 로그 줄 맨 앞의 Gateway 이름. 예: `미홈 1st`, `미홈 2rd`
-- `frmCnt`: BLE advertisement sequence 값
-- `gwts`: Gateway가 기록한 수신 timestamp
+- `frmCnt`: BLE advertisement sequence
+- `gwts`: Gateway 수신 timestamp
 - `eid`: Xiaomi MiBeacon 이벤트 ID
-- `eid_hex`: 이벤트 ID의 16진 표기
-- `edata`: Gateway가 전달한 원본 payload
-- `bytes`: `edata`를 디코딩한 byte 수
-- `type`: `eid=12291 / 0x3003`일 때 첫 번째 byte. `0`은 시작, non-zero는 종료 후보
-- `event_ts`: `0x3003` payload의 내장 timestamp
+- `eid_hex`: 16진 이벤트 ID
+- `edata`: 원본 payload
+- `bytes`: 디코딩된 byte 수
+- `type`: `0x3003` 첫 번째 byte
+- `event_ts`: `0x3003` payload 내장 timestamp
 
-강제 정지 테스트에서는 특히 **정지 버튼을 누른 직후의 `T700i RAW` 로그**를 확인합니다.
-
-예를 들어 다음과 같이 나오면 종료 이벤트로 즉시 처리할 수 있습니다.
+v1.10.4에서는 stale-stop이 추론되면 다음 로그도 추가됩니다.
 
 ```text
-BLE MQTT T700i RAW: ... eid=12291 eid_hex=0x3003 edata=... type=2 event_ts=...
+BLE MQTT T700i forced stop inferred: ... raw_event_ts=... gwts=... start_ts=... inferred_duration=...s
 ```
 
-반대로 강제 정지 순간에 다음과 같이 다른 EID가 들어온다면 해당 EID가 T700i의 별도 정지 이벤트인지 추가 분석해야 합니다.
+상태 로그에서는 원본 timestamp와 실제 적용 timestamp를 동시에 확인할 수 있습니다.
 
 ```text
-BLE MQTT T700i RAW: ... eid=<12291 이외 값> eid_hex=... edata=... type=- event_ts=-
+BLE MQTT toothbrush state OK: ...
+type=1
+raw_event_ts=<old timestamp>
+event_ts=<gwts>
+live=true
+raw_delta=<large value>
+delta=0
+forced_stop=true
+duration=...
 ```
 
-강제 정지 후 `T700i RAW` 로그 자체가 없다면 T700i가 종료 advertisement를 송신하지 않았거나 Gateway/openmiio 경로에서 해당 패킷을 전달하지 않은 것으로 볼 수 있으며, 이 경우 30초 watchdog fallback이 필요합니다.
+완료 로그는 다음처럼 표시됩니다.
 
-두 Gateway가 동일 MQTT broker를 동시에 구독하는 구성에서는 같은 `frmCnt`가 Gateway별로 각각 raw 로그에 나타날 수 있습니다. raw 로그는 의도적으로 중복 억제 전에 출력되며, 실제 SmartThings 상태 처리는 기존 `frmCnt` 중복 억제 규칙을 계속 적용합니다.
+```text
+BLE MQTT toothbrush session complete: ... duration=... forced_stop=true raw_event_ts=...
+```
 
 ## 런타임 필드
 
@@ -109,36 +157,36 @@ last_activity_ts      runtime Unix UTC
 
 `watchdog_generation`과 `last_activity_ts`는 런타임용 비영속 필드입니다.
 
-## 로그 확인
+## 정상 동작 확인
 
-양치 시작 로그에는 다음 내용이 포함되어야 합니다.
-
-```text
-type=0 ... live=true ... start_ts=...
-```
-
-정상 양치 종료는 보통 다음과 같습니다.
+일반 시작:
 
 ```text
-type=1 ... live=true ... duration=... duration_text=... score=...
+type=0 ... live=true ... forced_stop=false
+motionSensor=active
 ```
 
-강제/조기 정지 패킷이 다른 종료 코드를 사용하는 경우에는 다음처럼 `type`이 1이 아닌 non-zero 값일 수 있습니다.
+일반 정상 종료:
 
 ```text
-type=<non-zero> ... live=true ... duration=... score=-
+type=1 ... raw_event_ts=<current> event_ts=<current> live=true forced_stop=false
+motionSensor=inactive
+BLE MQTT toothbrush session complete
 ```
 
-정상적으로 종료 이벤트가 해석되면 이어서 다음 완료 로그가 표시됩니다.
+강제/조기 정지에서 이전 완료 timestamp가 재사용된 경우:
 
 ```text
-BLE MQTT toothbrush session complete ...
+T700i forced stop inferred
+motionSensor=inactive
+... raw_event_ts=<previous session> event_ts=<gwts> forced_stop=true ...
+BLE MQTT toothbrush session complete ... forced_stop=true
 ```
 
-종료 이벤트 자체가 유실되어 watchdog이 동작한 경우 다음과 같은 경고 로그가 표시됩니다.
+이 경우 `watchdog timeout`이 뒤이어 발생하지 않아야 정상입니다.
+
+종료 advertisement 자체가 없는 경우에만 다음 fallback이 예상됩니다.
 
 ```text
 BLE MQTT toothbrush watchdog timeout: ... inactivity=30s ... forcing motion inactive
 ```
-
-배터리 이벤트는 완료된 양치 세션 이벤트와 별도로 수신될 수 있습니다.
