@@ -1,5 +1,7 @@
 # Xiaomi Gateway Edge Tools
 
+[English](README.en.md)
+
 `xiaomi-gateway-edge-tools`는 **Xiaomi Gateway SmartThings Edge Driver의 선택형 관리/진단 도구 모음**입니다.
 
 이 폴더의 파일은 SmartThings Edge Driver 자체가 동작하는 데 필수는 아닙니다. Xiaomi `mgl03` Gateway에서 openmiio/MQTT BLE 경로를 구성하거나, MQTT로 들어오는 BLE 이벤트를 직접 확인할 때 관리 PC에서 사용합니다.
