@@ -134,6 +134,30 @@ TOKEN은 BLE KEY 또는 Gateway Key와 다른 값입니다.
 
 #### BLE 장치 사용
 
+BLE 온습도 센서나 Xiaomi Toothbrush T700i 같은 BLE 장치를 SmartThings에서 사용하려면 Edge Driver가 Xiaomi Gateway에서 발생하는 `_async.ble_event`를 **MQTT로 수신할 수 있어야 합니다.**
+
+##### openmiio를 설치해야 하는 경우
+
+openmiio는 모든 사용자가 설치해야 하는 구성 요소가 아닙니다. **BLE over MQTT 기능을 사용할 때, 현재 Gateway에서 SmartThings Hub가 접근할 수 있는 MQTT BLE 이벤트 경로가 없는 경우에만 필요합니다.**
+
+| 사용 목적 / 환경 | openmiio 필요 여부 | 설명 |
+|---|---|---|
+| Gateway 온라인/오프라인 상태만 확인 | 필요 없음 | miIO UDP `54321` 상태 확인만 사용 |
+| Zigbee 자식 자동 검색 / 온습도 polling | 필요 없음 | Gateway IP와 miIO TOKEN을 이용 |
+| BLE 장치를 사용하지 않음 | 필요 없음 | `BLE via MQTT = Off`로 사용 가능 |
+| 이미 호환 MQTT Broker에서 `_async.ble_event`가 제공됨 | 별도 설치 불필요 | 기존 Broker IP/Port를 Edge Driver에 지정 |
+| BLE 장치를 사용하지만 MQTT BLE 이벤트 경로가 없음 | **필요** | openmiio와 MQTT Broker를 구성해야 함 |
+| 현재 확인된 `lumi.gateway.mgl03` 환경에서 BLE over MQTT 구성 | **필요** | openmiio를 통해 `miio/report` / `central/report` BLE 이벤트를 MQTT로 전달 |
+
+즉, Gateway 상태 확인이나 Zigbee 장치만 사용할 경우에는 openmiio를 설치하지 않아도 됩니다. **BLE 온습도 센서 또는 T700i를 사용할 때만 먼저 MQTT BLE 이벤트가 이미 제공되는지 확인하고, 제공되지 않는 경우 openmiio를 설치하세요.**
+
+현재 저장소의 openmiio 설치 도구는 실제 확인된 **`lumi.gateway.mgl03` / MIPS 환경**을 대상으로 합니다. `mgl001`이나 다른 Xiaomi Gateway에 그대로 사용하면 안 됩니다.
+
+openmiio 설치, MQTT 확인, BLE 이벤트 진단 방법은 다음 문서를 참고하세요.
+
+- [`xiaomi-gateway-edge-tools/README.md`](xiaomi-gateway-edge-tools/README.md) — openmiio/MQTT 관리 도구 전체 사용 가이드
+- [`xiaomi-gateway-edge-tools/OPENMIIO-SETUP.md`](xiaomi-gateway-edge-tools/OPENMIIO-SETUP.md) — mgl03 openmiio 설치 및 문제 해결 절차
+
 BLE over MQTT를 사용하려면 Xiaomi Gateway 또는 같은 LAN의 장치에서 다음 서비스가 필요합니다.
 
 ```text
@@ -504,6 +528,7 @@ Windows에서는 다음 스크립트도 사용할 수 있습니다.
 
 - [`TOKEN-GUIDE.md`](TOKEN-GUIDE.md) — Xiaomi Gateway miIO TOKEN 설명
 - [`TOOTHBRUSH-SESSION.md`](TOOTHBRUSH-SESSION.md) — T700i 양치 세션 처리
+- [`xiaomi-gateway-edge-tools/README.md`](xiaomi-gateway-edge-tools/README.md) — openmiio/MQTT 설치 및 BLE 진단 도구 가이드
 - [`CHANGELOG.md`](CHANGELOG.md) — 버전별 변경 이력
 
 오류 재현이나 지원 장치 추가에 필요한 정보는 GitHub Issue를 통해 공유할 수 있습니다. 로그를 첨부할 때는 TOKEN, BLE KEY, Gateway Key 등 민감정보가 포함되지 않았는지 반드시 확인하세요.
