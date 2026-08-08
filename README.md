@@ -1,5 +1,7 @@
 # Xiaomi Gateway SmartThings Edge Driver
 
+[English](README.en.md)
+
 Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상태 확인과 Xiaomi Zigbee/BLE 자식 장치를 SmartThings에서 사용할 수 있도록 만든 비공식 Edge Driver입니다.
 
 현재 버전은 Xiaomi Gateway의 로컬 miIO 통신과 MQTT를 이용하며, Xiaomi Cloud 연결 없이 LAN 내부에서 동작하는 것을 목표로 합니다.
