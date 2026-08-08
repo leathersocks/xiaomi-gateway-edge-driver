@@ -18,6 +18,17 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 - BLE over MQTT 수신
 - 여러 Xiaomi Gateway 등록 가능
 
+#### 실제 동작을 확인한 Gateway
+
+현재 실제 SmartThings Hub 환경에서 다음 Xiaomi Gateway의 동작을 확인했습니다.
+
+| 제품명 | 모델 | 제품 모델 / SKU | 확인한 펌웨어 | 확인된 기능 |
+|---|---|---|---|---|
+| Xiaomi Smart Home Hub 2 | `lumi.gateway.mgl001` | `ZNDMWG04LM` / `BHR6765GL` | `1.0.8_0013` | miIO 상태 확인 / TOKEN 기반 자식 검색 / Zigbee 상태 polling |
+| Xiaomi Mijia Smart Multi-Mode Gateway | `lumi.gateway.mgl03` | `ZNDMWG03LM` / `ZNDMWG02LM` 계열 | `1.5.0_0026` | miIO 상태 확인 / openmiio / MQTT BLE 수신 |
+
+> 위 펌웨어 버전은 실제 테스트 환경에서 확인한 버전이며, 지원 가능한 최소/최대 펌웨어 버전을 의미하지 않습니다. 같은 내부 모델이라도 지역판, 펌웨어 또는 하드웨어 리비전에 따라 동작 차이가 있을 수 있습니다.
+
 ### Xiaomi BLE 장치
 
 현재 실제 동작을 확인한 BLE 장치는 다음과 같습니다.
