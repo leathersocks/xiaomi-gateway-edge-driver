@@ -1,5 +1,7 @@
 # 변경 이력
 
+[English](CHANGELOG.en.md)
+
 이 문서는 **Xiaomi Gateway Edge Driver**의 주요 변경 사항을 최초 `v1.0.0`부터 현재 버전까지 기록합니다.
 
 - 실제로 생성된 패키지, README, 설정 스크립트, 검증 자료 및 런타임 확인 결과를 기준으로 정리했습니다.
