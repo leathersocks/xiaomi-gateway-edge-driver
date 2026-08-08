@@ -4,8 +4,6 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 
 현재 버전은 Xiaomi Gateway의 로컬 miIO 통신과 MQTT를 이용하며, Xiaomi Cloud 연결 없이 LAN 내부에서 동작하는 것을 목표로 합니다.
 
-> 현재 버전: `v1.10.1-final-verified`
-
 ---
 
 ## 주요 기능
@@ -65,16 +63,6 @@ EID  = 12291 / 0x3003
 
 ---
 
-## 설치 전 준비 사항
-
-### 필수
-
-- SmartThings Edge Driver를 지원하는 SmartThings Hub
-- SmartThings 계정
-- Xiaomi Gateway와 SmartThings Hub가 서로 통신 가능한 동일 LAN 또는 라우팅 가능한 VLAN 환경
-
-**일반 사용자는 Git, SmartThings CLI, PowerShell 설치가 필요하지 않습니다.**
-
 ### 기능에 따라 선택적으로 필요
 
 #### Zigbee 자식 장치 자동 검색 / 상태 polling
@@ -115,42 +103,17 @@ SmartThings EDGE_CHILD
 BLE over MQTT 경로에서는 Xiaomi Gateway miIO TOKEN이 필요하지 않습니다.
 
 ---
-
-## 채널 초대 링크로 설치
-
-일반 사용자는 소스를 직접 다운로드하거나 SmartThings CLI로 패키징할 필요 없이 **SmartThings Edge Driver 채널 초대 링크**를 이용해 설치할 수 있습니다.
-
 ### 채널 초대 링크
 
 [https://bestow-regional.api.smartthings.com/invite/Kr2zLBpAKpjA](https://bestow-regional.api.smartthings.com/invite/Kr2zLBpAKpjA)
 
 ### 설치 순서
 
-1. 위 **채널 초대 링크**를 엽니다.
-2. SmartThings 계정으로 로그인합니다.
-3. 초대된 Edge Driver 채널을 등록합니다.
-4. 드라이버를 설치할 SmartThings Hub를 선택합니다.
-5. 설치 가능한 드라이버 목록에서 **Xiaomi Gateway** 드라이버를 설치합니다.
-6. 설치가 완료되면 SmartThings 앱으로 돌아갑니다.
-7. `기기 추가` → `주변 검색`을 실행합니다.
-8. 생성된 `Xiaomi Gateway` 장치를 열고 실제 Gateway의 `IP address`를 입력합니다.
-9. 필요한 경우 TOKEN, Zigbee polling, BLE MQTT 설정을 추가합니다.
-
-```text
-채널 초대 링크
-      ↓
-SmartThings 로그인
-      ↓
-Edge Driver 채널 등록
-      ↓
-Xiaomi Gateway 드라이버 설치
-      ↓
-SmartThings 앱 → 기기 추가 → 주변 검색
-      ↓
-Xiaomi Gateway 생성
-      ↓
-IP / TOKEN / MQTT 설정
-```
+1. 설치 가능한 드라이버 목록에서 **Xiaomi Gateway** 드라이버를 설치합니다.
+2. 설치가 완료되면 SmartThings 앱으로 돌아갑니다.
+3. `기기 추가` → `주변 검색`을 실행합니다.
+4. 생성된 `Xiaomi Gateway` 장치를 열고 실제 Gateway의 `IP address`를 입력합니다.
+5. 필요한 경우 TOKEN, Zigbee polling, BLE MQTT 설정을 추가합니다.
 
 > 드라이버를 채널에서 설치하는 것만으로 Xiaomi Gateway가 자동으로 완전히 설정되는 것은 아닙니다. SmartThings 앱에서 Gateway 장치를 검색한 후 실제 Xiaomi Gateway의 IP 주소를 입력해야 합니다.
 
@@ -166,8 +129,6 @@ IP / TOKEN / MQTT 설정
 4. `Xiaomi Gateway` 장치가 생성될 때까지 기다립니다.
 5. 생성된 `Xiaomi Gateway` 장치를 엽니다.
 6. `설정`에서 실제 Xiaomi Gateway 정보를 입력합니다.
-
-드라이버는 특정 Gateway IP나 모델을 소스에 고정하지 않습니다.
 
 한 번에 하나의 **미설정 Xiaomi Gateway 등록 슬롯**만 생성합니다. 여러 Gateway를 사용할 경우 첫 번째 Gateway의 IP 설정을 완료한 후 다시 `주변 검색`을 실행해 다음 Gateway를 추가하세요.
 
@@ -489,11 +450,5 @@ Windows에서는 다음 스크립트도 사용할 수 있습니다.
 - [`TOKEN-GUIDE.md`](TOKEN-GUIDE.md) — Xiaomi Gateway miIO TOKEN 설명
 - [`TOOTHBRUSH-SESSION.md`](TOOTHBRUSH-SESSION.md) — T700i 양치 세션 처리
 - [`CHANGELOG.md`](CHANGELOG.md) — 버전별 변경 이력
-
----
-
-## 라이선스 / 기여
-
-현재 저장소에 별도 LICENSE가 없다면 코드 사용 또는 재배포 전에 저장소 소유자의 조건을 확인하세요.
 
 오류 재현이나 지원 장치 추가에 필요한 정보는 GitHub Issue를 통해 공유할 수 있습니다. 로그를 첨부할 때는 TOKEN, BLE KEY, Gateway Key 등 민감정보가 포함되지 않았는지 반드시 확인하세요.
