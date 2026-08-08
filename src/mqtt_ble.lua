@@ -34,12 +34,15 @@ local EID_TOOTHBRUSH_EVENT = 12291 -- 0x3003
 local EID_STANDARD_BATTERY = 4106  -- 0x100A
 local TOOTHBRUSH_LIVE_WINDOW_SECONDS = 60
 local TOOTHBRUSH_MAX_SESSION_SECONDS = 10 * 60
+local TOOTHBRUSH_WATCHDOG_SECONDS = 30
 
 local TOOTHBRUSH_ACTIVE_FIELD = "xiaomi_toothbrush_active"
 local TOOTHBRUSH_START_TS_FIELD = "xiaomi_toothbrush_start_timestamp"
 local TOOTHBRUSH_LAST_TS_FIELD = "xiaomi_toothbrush_last_timestamp"
 local TOOTHBRUSH_LAST_SCORE_FIELD = "xiaomi_toothbrush_last_score"
 local TOOTHBRUSH_LAST_DURATION_FIELD = "xiaomi_toothbrush_last_duration"
+local TOOTHBRUSH_WATCHDOG_GENERATION_FIELD = "xiaomi_toothbrush_watchdog_generation"
+local TOOTHBRUSH_LAST_ACTIVITY_FIELD = "xiaomi_toothbrush_last_activity_timestamp"
 
 local function trim(value)
   return tostring(value or ""):match("^%s*(.-)%s*$")
@@ -167,7 +170,6 @@ local function byte_value(hex_value)
   return bytes[1]
 end
 
-
 local function little_u32_from_bytes(bytes, offset)
   offset = offset or 1
 
@@ -193,7 +195,6 @@ local function format_kst(timestamp)
     timestamp + (9 * 60 * 60)
   )
 end
-
 
 local function format_duration(seconds)
   seconds = tonumber(seconds)
@@ -258,7 +259,6 @@ local function emit_battery(child, value)
   return false
 end
 
-
 local function emit_toothbrush_state(child, value)
   if not child:supports_capability(capabilities.motionSensor) then
     return false
@@ -279,10 +279,140 @@ local function emit_toothbrush_state(child, value)
   return false
 end
 
+local function numeric_field(device, field_name)
+  local raw = device:get_field(field_name)
+  return tonumber(raw) or 0
+end
+
+local function toothbrush_watchdog_generation(child)
+  return numeric_field(child, TOOTHBRUSH_WATCHDOG_GENERATION_FIELD)
+end
+
+local function invalidate_toothbrush_watchdog(child)
+  local generation = toothbrush_watchdog_generation(child) + 1
+
+  child:set_field(
+    TOOTHBRUSH_WATCHDOG_GENERATION_FIELD,
+    generation,
+    { persist = false }
+  )
+
+  child:set_field(
+    TOOTHBRUSH_LAST_ACTIVITY_FIELD,
+    0,
+    { persist = false }
+  )
+
+  return generation
+end
+
+local function arm_toothbrush_watchdog(child, source_label, reason)
+  if not child.thread then
+    log.warn(string.format(
+      "%s BLE MQTT toothbrush watchdog unavailable: label=%s reason=no-device-thread",
+      tostring(source_label or "Xiaomi Gateway"),
+      tostring(child.label or child.id)
+    ))
+    return false
+  end
+
+  local generation = toothbrush_watchdog_generation(child) + 1
+  local activity_timestamp = os.time()
+
+  child:set_field(
+    TOOTHBRUSH_WATCHDOG_GENERATION_FIELD,
+    generation,
+    { persist = false }
+  )
+
+  child:set_field(
+    TOOTHBRUSH_LAST_ACTIVITY_FIELD,
+    activity_timestamp,
+    { persist = false }
+  )
+
+  child.thread:call_with_delay(
+    TOOTHBRUSH_WATCHDOG_SECONDS,
+    function()
+      if toothbrush_watchdog_generation(child) ~= generation then
+        return
+      end
+
+      local active_raw = child:get_field(TOOTHBRUSH_ACTIVE_FIELD)
+      if active_raw ~= true then
+        return
+      end
+
+      local last_activity =
+        numeric_field(child, TOOTHBRUSH_LAST_ACTIVITY_FIELD)
+      local now = os.time()
+
+      if last_activity > 0 and
+         (now - last_activity) < TOOTHBRUSH_WATCHDOG_SECONDS then
+        return
+      end
+
+      emit_toothbrush_state(child, "idle")
+
+      child:set_field(
+        TOOTHBRUSH_ACTIVE_FIELD,
+        false,
+        { persist = true }
+      )
+
+      child:set_field(
+        TOOTHBRUSH_START_TS_FIELD,
+        0,
+        { persist = true }
+      )
+
+      child:set_field(
+        TOOTHBRUSH_LAST_ACTIVITY_FIELD,
+        0,
+        { persist = false }
+      )
+
+      log.warn(string.format(
+        "%s BLE MQTT toothbrush watchdog timeout: label=%s inactivity=%ss reason=%s; forcing motion inactive",
+        tostring(source_label or "Xiaomi Gateway"),
+        tostring(child.label or child.id),
+        TOOTHBRUSH_WATCHDOG_SECONDS,
+        tostring(reason or "no-start-heartbeat")
+      ))
+    end,
+    "xiaomi T700i activity watchdog"
+  )
+
+  return true
+end
+
+local function refresh_duplicate_toothbrush_watchdog(child, params, source_label)
+  if child:get_field(TOOTHBRUSH_ACTIVE_FIELD) ~= true then
+    return false
+  end
+
+  for _, event in ipairs(params.evt or {}) do
+    if tonumber(event.eid) == EID_TOOTHBRUSH_EVENT then
+      local bytes = hex_bytes(event.edata)
+
+      if bytes and #bytes >= 1 and bytes[1] == 0 then
+        return arm_toothbrush_watchdog(
+          child,
+          source_label,
+          "repeated-start-advertisement"
+        )
+      end
+    end
+  end
+
+  return false
+end
+
 local function process_toothbrush_event(
   child,
   event,
-  gateway_timestamp
+  gateway_timestamp,
+  source_label
 )
   local bytes = hex_bytes(event.edata)
   if not bytes or #bytes < 5 then
@@ -370,11 +500,19 @@ local function process_toothbrush_event(
       if emit_toothbrush_state(child, "brushing") then
         emitted = emitted + 1
       end
+
+      arm_toothbrush_watchdog(
+        child,
+        source_label,
+        session_started and "live-start" or "live-start-heartbeat"
+      )
     end
   else
     -- Only a LIVE end event changes current brushing state or calculates
     -- duration. Historical replay packets never terminate a live session.
     if is_live then
+      invalidate_toothbrush_watchdog(child)
+
       if emit_toothbrush_state(child, "idle") then
         emitted = emitted + 1
       end
@@ -510,6 +648,13 @@ local function process_ble_params(driver, source, params, topic)
 
   local previous_sequence = sequence_owner:get_field(sequence_field)
   if sequence and previous_sequence == sequence then
+    if pdid == PDID_TOOTHBRUSH_T700I then
+      refresh_duplicate_toothbrush_watchdog(
+        child,
+        params,
+        source.label
+      )
+    end
     return 0
   end
 
@@ -536,7 +681,8 @@ local function process_ble_params(driver, source, params, topic)
           process_toothbrush_event(
             child,
             event,
-            params.gwts
+            params.gwts,
+            source.label
           )
         emitted = emitted + count
       elseif eid == EID_STANDARD_BATTERY then
