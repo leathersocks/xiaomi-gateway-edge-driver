@@ -4,6 +4,13 @@ components:
   capabilities:
   - id: locketforest19027.xiaomiGatewayStatus
     version: 1
+    config:
+      values:
+      - key: gatewayStatus.value
+        enabledValues:
+        - online
+        - degraded
+        - offline
   categories:
   - name: Hub
 preferences:
