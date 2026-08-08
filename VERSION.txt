@@ -1,2 +1,2 @@
-v1.10.6-gateway-presentation-refresh
+v1.10.7-gateway-profile-refresh
 2026-08-09
