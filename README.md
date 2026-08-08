@@ -40,6 +40,50 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 
 BLE 장치는 MQTT 광고를 수신하면 SmartThings `EDGE_CHILD` 장치로 자동 등록됩니다.
 
+### Xiaomi BLE 온습도 센서
+
+`pdid=5860`인 Xiaomi BLE 온습도 센서는 MiBeacon 이벤트를 통해 온도, 습도, 배터리 값을 전달합니다.
+
+현재 드라이버에서 처리하는 이벤트는 다음과 같습니다.
+
+| 항목 | EID | Hex | 데이터 형식 | SmartThings Capability |
+|---|---:|---:|---|---|
+| 온도 | `19457` | `0x4C01` | little-endian IEEE-754 float32 | `temperatureMeasurement` |
+| 습도 | `19458` | `0x4C02` | uint8 | `relativeHumidityMeasurement` |
+| 배터리 | `18435` | `0x4803` | uint8 | `battery` |
+
+온도 이벤트:
+
+```text
+pdid = 5860
+EID  = 19457 / 0x4C01
+edata = little-endian float32
+        ↓
+temperatureMeasurement
+```
+
+습도 이벤트:
+
+```text
+pdid = 5860
+EID  = 19458 / 0x4C02
+edata = uint8
+        ↓
+relativeHumidityMeasurement
+```
+
+배터리 이벤트:
+
+```text
+pdid = 5860
+EID  = 18435 / 0x4803
+edata = uint8
+        ↓
+battery
+```
+
+드라이버는 온도를 섭씨(`°C`), 습도와 배터리를 퍼센트(`%`)로 SmartThings에 반영합니다. 온도, 습도, 배터리 이벤트는 하나의 MQTT 광고에 모두 포함될 수도 있고 각각 별도로 들어올 수도 있습니다.
+
 ### Xiaomi Toothbrush T700i
 
 T700i의 MiBeacon 이벤트를 이용해 양치 상태를 SmartThings에 반영합니다.
