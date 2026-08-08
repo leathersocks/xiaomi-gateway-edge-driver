@@ -65,17 +65,15 @@ EID  = 12291 / 0x3003
 
 ---
 
-## 준비 사항
-
-설치 전에 다음 항목이 필요합니다.
+## 설치 전 준비 사항
 
 ### 필수
 
 - SmartThings Edge Driver를 지원하는 SmartThings Hub
-- Xiaomi Gateway와 SmartThings Hub가 통신 가능한 동일 LAN/VLAN 환경
-- Windows / macOS / Linux PC
-- SmartThings CLI
-- Git
+- SmartThings 계정
+- Xiaomi Gateway와 SmartThings Hub가 서로 통신 가능한 동일 LAN 또는 라우팅 가능한 VLAN 환경
+
+**일반 사용자는 Git, SmartThings CLI, PowerShell 설치가 필요하지 않습니다.**
 
 ### 기능에 따라 선택적으로 필요
 
@@ -118,56 +116,49 @@ BLE over MQTT 경로에서는 Xiaomi Gateway miIO TOKEN이 필요하지 않습�
 
 ---
 
-## 설치 방법
+## 채널 초대 링크로 설치
 
-현재 저장소는 **소스 직접 설치 방식**을 기준으로 안내합니다.
+일반 사용자는 소스를 직접 다운로드하거나 SmartThings CLI로 패키징할 필요 없이 **SmartThings Edge Driver 채널 초대 링크**를 이용해 설치할 수 있습니다.
 
-### 1. 저장소 다운로드
+### 채널 초대 링크
 
-Git을 사용하는 경우:
+[https://bestow-regional.api.smartthings.com/invite/Kr2zLBpAKpjA](https://bestow-regional.api.smartthings.com/invite/Kr2zLBpAKpjA)
 
-```powershell
-git clone https://github.com/leathersocks/xiaomi-gateway-edge-driver.git
-cd xiaomi-gateway-edge-driver
+### 설치 순서
+
+1. 위 **채널 초대 링크**를 엽니다.
+2. SmartThings 계정으로 로그인합니다.
+3. 초대된 Edge Driver 채널을 등록합니다.
+4. 드라이버를 설치할 SmartThings Hub를 선택합니다.
+5. 설치 가능한 드라이버 목록에서 **Xiaomi Gateway** 드라이버를 설치합니다.
+6. 설치가 완료되면 SmartThings 앱으로 돌아갑니다.
+7. `기기 추가` → `주변 검색`을 실행합니다.
+8. 생성된 `Xiaomi Gateway` 장치를 열고 실제 Gateway의 `IP address`를 입력합니다.
+9. 필요한 경우 TOKEN, Zigbee polling, BLE MQTT 설정을 추가합니다.
+
+```text
+채널 초대 링크
+      ↓
+SmartThings 로그인
+      ↓
+Edge Driver 채널 등록
+      ↓
+Xiaomi Gateway 드라이버 설치
+      ↓
+SmartThings 앱 → 기기 추가 → 주변 검색
+      ↓
+Xiaomi Gateway 생성
+      ↓
+IP / TOKEN / MQTT 설정
 ```
 
-또는 GitHub에서 `Code → Download ZIP`을 선택한 후 압축을 풀어도 됩니다.
-
-### 2. SmartThings CLI 로그인
-
-SmartThings CLI가 설치되어 있지 않다면 먼저 설치합니다.
-
-설치 후 로그인 상태를 확인합니다.
-
-```powershell
-smartthings devices
-```
-
-SmartThings 계정 인증이 필요한 경우 CLI 안내에 따라 로그인합니다.
-
-### 3. Edge Driver 패키징 및 설치
-
-Windows PowerShell에서는 다음 스크립트를 사용할 수 있습니다.
-
-```powershell
-.\install.ps1
-```
-
-또는 SmartThings CLI를 직접 실행합니다.
-
-```powershell
-smartthings edge:drivers:package . --install
-```
-
-명령 실행 중 설치할 SmartThings Hub를 선택합니다.
-
-> `sync-ui.ps1`은 일반 설치에 필요하지 않습니다. 기존 Gateway Status Custom Capability의 UI 정의를 다시 적용할 때만 사용하는 유지보수 스크립트입니다.
+> 드라이버를 채널에서 설치하는 것만으로 Xiaomi Gateway가 자동으로 완전히 설정되는 것은 아닙니다. SmartThings 앱에서 Gateway 장치를 검색한 후 실제 Xiaomi Gateway의 IP 주소를 입력해야 합니다.
 
 ---
 
 ## Xiaomi Gateway 등록
 
-드라이버 설치 후 SmartThings 앱에서 Gateway를 등록합니다.
+드라이버를 Hub에 설치한 후 SmartThings 앱에서 Gateway를 등록합니다.
 
 1. SmartThings 앱을 엽니다.
 2. `기기 추가`를 선택합니다.
@@ -329,9 +320,18 @@ degraded
 offline
 ```
 
-### MQTT
+### BLE / MQTT
 
-문제가 있을 때 다음 명령으로 Edge Driver 로그를 확인할 수 있습니다.
+BLE 기능을 사용하는 경우 정상 연결 후 다음 동작을 확인합니다.
+
+- BLE 온습도 센서가 자동으로 생성되는지
+- 온도/습도 값이 갱신되는지
+- T700i를 사용하면 양치 시작/종료 상태가 변경되는지
+- MQTT 연결이 끊긴 뒤 자동 재연결되는지
+
+### 개발자용 logcat 확인
+
+일반 사용자는 필요하지 않지만, 문제 분석 시 SmartThings CLI를 설치한 PC에서 다음과 같이 로그를 확인할 수 있습니다.
 
 ```powershell
 smartthings edge:drivers
@@ -386,7 +386,7 @@ T700i 세션 처리에 대한 자세한 내용은 [`TOOTHBRUSH-SESSION.md`](TOOT
 
 ### Xiaomi Gateway가 검색되지 않는 경우
 
-- Edge Driver가 해당 Hub에 설치되어 있는지 확인합니다.
+- 채널 초대 링크를 통해 드라이버가 해당 SmartThings Hub에 설치되어 있는지 확인합니다.
 - SmartThings 앱에서 `주변 검색`을 다시 실행합니다.
 - 이미 IP가 비어 있는 `Xiaomi Gateway` 장치가 하나 존재하는지 확인합니다.
 - 미설정 Gateway가 있으면 먼저 해당 장치의 IP를 설정한 후 다시 검색합니다.
@@ -419,6 +419,26 @@ T700i의 점수와 배터리는 항상 같은 BLE 패킷으로 오지 않을 수
 - 배터리는 별도의 MiBeacon 배터리 이벤트로 수신됩니다.
 
 따라서 종료 직후 배터리가 별도로 갱신되는 것은 정상입니다.
+
+---
+
+## 개발자용 소스 설치
+
+일반 사용자는 이 절차가 필요하지 않습니다. 드라이버 개발, 수정 또는 테스트가 필요한 경우에만 저장소를 직접 패키징할 수 있습니다.
+
+```powershell
+git clone https://github.com/leathersocks/xiaomi-gateway-edge-driver.git
+cd xiaomi-gateway-edge-driver
+smartthings edge:drivers:package . --install
+```
+
+Windows에서는 다음 스크립트도 사용할 수 있습니다.
+
+```powershell
+.\install.ps1
+```
+
+`sync-ui.ps1`은 일반 설치용이 아니라 기존 Gateway Status Custom Capability의 UI 정의를 다시 적용하기 위한 유지보수 스크립트입니다.
 
 ---
 
