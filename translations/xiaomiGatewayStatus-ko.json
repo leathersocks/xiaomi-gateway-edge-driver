@@ -1,20 +1,20 @@
 {
   "tag": "ko",
-  "label": "게이트웨이 상태",
+  "label": "상태",
   "attributes": {
     "gatewayStatus": {
-      "label": "게이트웨이 상태",
+      "label": "상태",
       "displayTemplate": "{{attribute}}: {{value}}",
       "i18n": {
         "value": {
           "online": {
-            "label": "온라인"
+            "label": "연결됨"
           },
           "degraded": {
             "label": "연결 불안정"
           },
           "offline": {
-            "label": "오프라인"
+            "label": "연결 안됨"
           }
         }
       }
