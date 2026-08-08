@@ -40,9 +40,10 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
 }
 
 Write-Host ""
-Write-Host "Optional gateway-status UI metadata sync"
-Write-Host "This is NOT required for normal driver package/install."
-Write-Host "Use it only when the existing gateway-status capability UI must be re-applied."
+Write-Host "=== Gateway-status custom capability UI sync ==="
+Write-Host "Capability: $CapabilityId"
+Write-Host "Translations and Capability Presentation are SmartThings cloud metadata."
+Write-Host "This sync is required whenever translation or presentation files change."
 Write-Host ""
 
 Invoke-ST `
@@ -81,10 +82,11 @@ Invoke-ST `
   -Description "Updating presentation: $CapabilityId" `
   -Arguments @(
     "capabilities:presentation:update",
-    "-i", $Temp,
     $CapabilityId,
-    "--capability-version", "1"
+    "--capability-version", "1",
+    "-i", $Temp
   )
 
 Write-Host ""
 Write-Host "Gateway-status UI metadata sync completed."
+Write-Host "Korean values expected: online=연결됨, degraded=연결 불안정, offline=연결 안됨"
