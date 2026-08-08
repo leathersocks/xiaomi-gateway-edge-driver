@@ -24,8 +24,8 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 
 | 구분 | 모델 | 모델명 | pdid | 지원 기능 |
 |---|---|---|---:|---|
-| Xiaomi BLE 온습도 센서 | `LYWSD02MMC` | `miaomiaoce.sensor_ht.o2` | `5860` | 온도 / 습도 / 배터리 |
-| Xiaomi Toothbrush T700i | `MES604` | `k0918.toothbrush.t700i` | `6032` | 양치 시작/종료 / 양치 시간 / 점수 / 배터리 |
+| Xiaomi BLE 온습도 센서 | `miaomiaoce.sensor_ht.o2` | `LYWSD02MMC` | `5860` | 온도 / 습도 / 배터리 |
+| Xiaomi Toothbrush T700i | `k0918.toothbrush.t700i` | `MES604` | `6032` | 양치 시작/종료 / 양치 시간 / 점수 / 배터리 |
 
 BLE 장치는 MQTT 광고를 수신하면 SmartThings `EDGE_CHILD` 장치로 자동 등록됩니다.
 
