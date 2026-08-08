@@ -1,2 +1,2 @@
-v1.10.8-mqtt-thread-isolation
+v1.10.8-final-verified
 2026-08-09
