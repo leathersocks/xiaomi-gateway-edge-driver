@@ -1,2 +1,2 @@
-v1.10.5-gateway-status-i18n-fix
+v1.10.6-gateway-presentation-refresh
 2026-08-09
