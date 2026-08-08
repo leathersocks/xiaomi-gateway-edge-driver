@@ -1,197 +1,479 @@
-# Xiaomi Gateway Edge Driver v1.10.1-final-verified
+# Xiaomi Gateway SmartThings Edge Driver
 
-실제 SmartThings Hub 런타임에서 검증된 v1.10.0 세션 버전을 기준으로 정리한 최종 배포 패키지입니다.
+Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상태 확인과 Xiaomi Zigbee/BLE 자식 장치를 SmartThings에서 사용할 수 있도록 만든 비공식 Edge Driver입니다.
+
+현재 버전은 Xiaomi Gateway의 로컬 miIO 통신과 MQTT를 이용하며, Xiaomi Cloud 연결 없이 LAN 내부에서 동작하는 것을 목표로 합니다.
+
+> 현재 버전: `v1.10.1-final-verified`
+
+---
 
 ## 주요 기능
 
 ### Xiaomi Gateway
 
-- miIO UDP 54321 상태 확인
-- 온라인 / 성능저하 / 오프라인 상태 관리
-- TOKEN 기반 선택적 자식 장치 자동 검색
-- 선택적 Zigbee 온도/습도 상태 폴링
-- 선택적 BLE over MQTT 수신
+- Xiaomi miIO UDP `54321` 상태 확인
+- Gateway 온라인 / 성능저하 / 오프라인 상태 관리
+- 설정 가능한 Health Check 주기
+- miIO TOKEN 기반 Xiaomi 자식 장치 자동 검색
+- 지원되는 Zigbee 온습도 장치 상태 polling
+- BLE over MQTT 수신
+- 여러 Xiaomi Gateway 등록 가능
 
-### BLE 장치
+### Xiaomi BLE 장치
 
-- `pdid 5860` 온도 / 습도 / 배터리 지원
-- `pdid 6032` Xiaomi Toothbrush T700i 지원
-- BLE 자식 장치 자동 등록
-- 기존 BLE 자식의 부모 Gateway 관계 유지
-- MQTT keepalive 및 자동 재연결
+현재 실제 동작을 확인한 BLE 장치는 다음과 같습니다.
+
+| 구분 | pdid | 지원 기능 |
+|---|---:|---|
+| Xiaomi BLE 온습도 센서 | `5860` | 온도 / 습도 / 배터리 |
+| Xiaomi Toothbrush T700i | `6032` | 양치 시작/종료 / 양치 시간 / 점수 / 배터리 |
+
+BLE 장치는 MQTT 광고를 수신하면 SmartThings `EDGE_CHILD` 장치로 자동 등록됩니다.
 
 ### Xiaomi Toothbrush T700i
 
-- 양치 시작 이벤트 → `motionSensor = active`
-- 양치 종료 이벤트 → `motionSensor = inactive`
-- BLE 이벤트 내부 timestamp 해석
-- 60초 기준 실시간 / 과거 이벤트 구분
-- 반복되는 시작 이벤트에서도 최초 시작 시각 유지
-- 양치 세션 시간 자동 계산
-- 마지막 양치 시각 저장
-- 양치 점수 저장
-- 배터리 상태 처리
-- Edge Driver 재시작 시 최대 10분 이내의 진행 중 세션 복원
+T700i의 MiBeacon 이벤트를 이용해 양치 상태를 SmartThings에 반영합니다.
 
-## T700i 이벤트 처리
+```text
+양치 시작
+    ↓
+motionSensor = active
 
-현재 확인된 T700i BLE 이벤트는 다음과 같습니다.
+양치 종료
+    ↓
+motionSensor = inactive
+```
+
+현재 확인된 이벤트:
 
 ```text
 pdid = 6032
 EID  = 12291 / 0x3003
 ```
 
-양치 시작:
+지원 항목:
+
+- 양치 시작 시각
+- 양치 종료 시각
+- 양치 시간 계산
+- 양치 점수
+- 배터리
+- 반복되는 시작 이벤트에서 최초 시작 시각 유지
+- 과거 BLE 이벤트가 현재 양치 상태를 잘못 종료하지 않도록 필터링
+- 최근 활성 세션의 재시작 복구
+
+---
+
+## 준비 사항
+
+설치 전에 다음 항목이 필요합니다.
+
+### 필수
+
+- SmartThings Edge Driver를 지원하는 SmartThings Hub
+- Xiaomi Gateway와 SmartThings Hub가 통신 가능한 동일 LAN/VLAN 환경
+- Windows / macOS / Linux PC
+- SmartThings CLI
+- Git
+
+### 기능에 따라 선택적으로 필요
+
+#### Zigbee 자식 장치 자동 검색 / 상태 polling
+
+Xiaomi Gateway 자체의 **32자리 miIO TOKEN**이 필요합니다.
 
 ```text
-type = 0
-motionSensor = active
+16바이트 / 32자리 16진수 문자열
 ```
 
-양치 종료:
+TOKEN은 BLE KEY 또는 Gateway Key와 다른 값입니다.
+
+자세한 내용은 [`TOKEN-GUIDE.md`](TOKEN-GUIDE.md)를 참고하세요.
+
+#### BLE 장치 사용
+
+BLE over MQTT를 사용하려면 Xiaomi Gateway 또는 같은 LAN의 장치에서 다음 서비스가 필요합니다.
 
 ```text
-type = 1
-motionSensor = inactive
-score = 양치 점수
+openmiio
+Mosquitto 또는 호환 MQTT Broker
 ```
 
-배터리는 별도의 표준 MiBeacon 이벤트로 처리합니다.
+기본 MQTT 포트는 `1883`입니다.
 
 ```text
-EID = 0x100A
+Xiaomi BLE 장치
+      ↓
+Xiaomi Gateway / openmiio
+      ↓
+MQTT Broker
+      ↓
+SmartThings Edge Driver
+      ↓
+SmartThings EDGE_CHILD
 ```
 
-과거에 저장된 양치 종료 이벤트가 다시 전송되더라도 현재 진행 중인 양치 상태를 종료시키지 않도록 다음 기준을 사용합니다.
+BLE over MQTT 경로에서는 Xiaomi Gateway miIO TOKEN이 필요하지 않습니다.
 
-```text
-abs(gwts - event timestamp) <= 60초
-    → 실시간 이벤트
+---
 
-60초 초과
-    → 과거 기록
+## 설치 방법
+
+현재 저장소는 **소스 직접 설치 방식**을 기준으로 안내합니다.
+
+### 1. 저장소 다운로드
+
+Git을 사용하는 경우:
+
+```powershell
+git clone https://github.com/leathersocks/xiaomi-gateway-edge-driver.git
+cd xiaomi-gateway-edge-driver
 ```
 
-## 설치
+또는 GitHub에서 `Code → Download ZIP`을 선택한 후 압축을 풀어도 됩니다.
 
-Windows PowerShell에서 저장소 폴더로 이동한 후 다음을 실행합니다.
+### 2. SmartThings CLI 로그인
+
+SmartThings CLI가 설치되어 있지 않다면 먼저 설치합니다.
+
+설치 후 로그인 상태를 확인합니다.
+
+```powershell
+smartthings devices
+```
+
+SmartThings 계정 인증이 필요한 경우 CLI 안내에 따라 로그인합니다.
+
+### 3. Edge Driver 패키징 및 설치
+
+Windows PowerShell에서는 다음 스크립트를 사용할 수 있습니다.
 
 ```powershell
 .\install.ps1
 ```
 
-또는 SmartThings CLI를 직접 사용할 수 있습니다.
+또는 SmartThings CLI를 직접 실행합니다.
 
 ```powershell
 smartthings edge:drivers:package . --install
 ```
 
+명령 실행 중 설치할 SmartThings Hub를 선택합니다.
+
+> `sync-ui.ps1`은 일반 설치에 필요하지 않습니다. 기존 Gateway Status Custom Capability의 UI 정의를 다시 적용할 때만 사용하는 유지보수 스크립트입니다.
+
+---
+
+## Xiaomi Gateway 등록
+
+드라이버 설치 후 SmartThings 앱에서 Gateway를 등록합니다.
+
+1. SmartThings 앱을 엽니다.
+2. `기기 추가`를 선택합니다.
+3. `주변 검색`을 실행합니다.
+4. `Xiaomi Gateway` 장치가 생성될 때까지 기다립니다.
+5. 생성된 `Xiaomi Gateway` 장치를 엽니다.
+6. `설정`에서 실제 Xiaomi Gateway 정보를 입력합니다.
+
+드라이버는 특정 Gateway IP나 모델을 소스에 고정하지 않습니다.
+
+한 번에 하나의 **미설정 Xiaomi Gateway 등록 슬롯**만 생성합니다. 여러 Gateway를 사용할 경우 첫 번째 Gateway의 IP 설정을 완료한 후 다시 `주변 검색`을 실행해 다음 Gateway를 추가하세요.
+
+---
+
 ## Gateway 설정
 
-현재 Gateway 설정 화면에는 다음 9개 항목만 표시됩니다.
+SmartThings의 Xiaomi Gateway 설정에는 다음 9개 항목이 있습니다.
 
-1. IP address
-2. Health check interval
-3. Auto child discovery
-4. TOKEN
-5. Zigbee state polling
-6. Zigbee poll interval
-7. BLE via MQTT
-8. BLE MQTT broker IP
-9. BLE MQTT port
+| 설정 | 설명 | 기본값 |
+|---|---|---:|
+| `IP address` | Xiaomi Gateway IPv4 주소 | 없음 |
+| `Health check interval` | miIO 상태 확인 주기 | 60초 |
+| `Auto child discovery` | TOKEN 기반 Xiaomi 자식 자동 검색 | Off |
+| `TOKEN` | Xiaomi Gateway miIO TOKEN | 없음 |
+| `Zigbee state polling` | 지원 Zigbee 장치 상태 polling | Off |
+| `Zigbee poll interval` | Zigbee polling 주기 | 60초 |
+| `BLE via MQTT` | BLE MQTT 수신 활성화 | Off |
+| `BLE MQTT broker IP` | MQTT Broker IP | 비워두면 Gateway IP 사용 |
+| `BLE MQTT port` | MQTT Broker TCP Port | 1883 |
 
-BLE MQTT를 사용하는 Gateway에서는 Mosquitto/openmiio가 실행 중이어야 합니다.
+---
 
-기본 MQTT 설정:
+## 가장 간단한 사용 방법
 
-```text
-Topic      #
-Keepalive  30초
-PINGREQ    15초
-PINGRESP   10초 timeout
-Reconnect  3초
-```
+### Gateway 상태만 확인하는 경우
 
-## 선택적 UI 동기화
-
-`sync-ui.ps1`은 기존에 생성되어 있는 다음 Custom Capability의 UI 정의를 다시 적용할 때만 사용합니다.
+다음 설정만 필요합니다.
 
 ```text
-locketforest19027.xiaomiGatewayStatus
+IP address = Xiaomi Gateway IP
 ```
 
-일반적인 Edge Driver 설치에는 실행할 필요가 없습니다.
-
-## 보안
-
-- BLE 장치별 BLE KEY를 드라이버에 저장하지 않습니다.
-- BLE 장치별 TOKEN을 드라이버에 저장하지 않습니다.
-- 고정 DID/MAC 장치 목록을 소스에 포함하지 않습니다.
-- Gateway TOKEN은 SmartThings 장치 설정값으로만 사용합니다.
-- Gateway TOKEN은 logcat에 출력하지 않습니다.
-- MQTT Broker는 신뢰할 수 있는 LAN/VLAN 내부에서만 사용하는 것을 권장합니다.
-- 인증 없는 MQTT 1883 포트를 인터넷에 노출하지 마십시오.
-
-## 최종 패키지 구성
-
-### Edge Runtime
+이 경우 드라이버는 UDP `54321`로 Gateway 상태만 확인합니다.
 
 ```text
-config.yml
-src/
-profiles/
+online
+  ↓
+degraded
+  ↓
+offline
 ```
 
-### Gateway Status UI 유지보수 파일
+기본적으로 3회 연속 실패해야 offline으로 판정합니다.
+
+### Zigbee 자식 장치를 사용하는 경우
+
+다음 설정을 추가합니다.
 
 ```text
-capabilities/
-translations/
-sync-ui.ps1
+Auto child discovery = On
+TOKEN                = Xiaomi Gateway miIO TOKEN
 ```
 
-### 설치 및 문서
+온습도 값을 polling하려면:
 
 ```text
-install.ps1
-README.md
-CHANGELOG.md
-TOKEN-GUIDE.md
-TOOTHBRUSH-SESSION.md
-VERSION.txt
-SHA256SUMS.txt
+Zigbee state polling = On
+Zigbee poll interval = 60
 ```
 
-## 별도 관리 도구
+현재 상태 polling이 구현된 주요 계열은 Xiaomi Zigbee 온습도 장치입니다.
 
-SmartThings Edge Driver 런타임에 필요하지 않은 Gateway 관리 및 BLE 분석 도구는 최종 드라이버 패키지에서 분리했습니다.
+예:
 
 ```text
-install-openmiio-mgl03-v5.py
-mqtt-ble-probe-v2.py
-OPENMIIO-SETUP.md
+lumi.weather.v1
+lumi.sensor_ht.v1
 ```
 
-이 파일들은 관리자 PC에서 Gateway 설정 및 BLE MQTT 진단이 필요할 때만 사용합니다.
+자동 검색된 모델은 이름에 따라 다음 SmartThings child profile로 분류됩니다.
 
-## 검증 상태
+- 온습도
+- Contact
+- Motion
+- Water Leak
+- Generic
 
-실제 SmartThings Hub에서 다음 항목이 확인되었습니다.
+다만 **자동 등록된 모든 모델의 실시간 상태가 구현되어 있는 것은 아닙니다.** 현재 Zigbee polling은 온습도 계열을 중심으로 지원합니다.
 
-- Xiaomi Gateway miIO 상태 확인
+### BLE 온습도 센서 / T700i를 사용하는 경우
+
+MQTT가 실행되는 Gateway의 설정에서:
+
+```text
+BLE via MQTT       = On
+BLE MQTT broker IP = MQTT Broker IP
+BLE MQTT port      = 1883
+```
+
+Broker IP를 비워두면 해당 Xiaomi Gateway의 `IP address`를 사용합니다.
+
+정상 연결 시 드라이버는 MQTT topic `#`을 구독하고 Xiaomi BLE 이벤트를 자동으로 처리합니다.
+
+---
+
+## MQTT 기본 동작
+
+```text
+Subscription Topic : #
+Keepalive          : 30초
+PINGREQ            : 15초
+PINGRESP timeout   : 10초
+Receive timeout    : 5초
+Reconnect          : 3초
+```
+
+BLE 이벤트는 다음 topic에서 처리합니다.
+
+```text
+miio/report
+central/report
+```
+
+중복 가능성이 있는 `openmiio/log` 복사본은 BLE 상태 처리에서 사용하지 않습니다.
+
+---
+
+## SmartThings에 생성되는 장치
+
+예를 들어 다음과 같은 구조가 만들어질 수 있습니다.
+
+```text
+Xiaomi Gateway
+├─ Xiaomi Zigbee 온습도 센서
+├─ Xiaomi Contact Sensor
+├─ Xiaomi Motion Sensor
+└─ Xiaomi Water Leak Sensor
+
+BLE MQTT 광고
+├─ BLE 온습도 xxxx
+└─ BLE 칫솔 xxxx
+```
+
+BLE 장치는 MAC을 기반으로 만든 안정적인 child key를 사용하기 때문에 같은 센서가 반복 광고되더라도 새로운 장치를 계속 생성하지 않습니다.
+
+기존 BLE child가 이미 존재하면 가능한 경우 기존 SmartThings 장치와 이름, parent 관계를 유지합니다.
+
+---
+
+## 정상 동작 확인
+
+### Gateway
+
+SmartThings 앱에서 Gateway Status가 다음 중 하나로 표시되는지 확인합니다.
+
+```text
+online
+degraded
+offline
+```
+
+### MQTT
+
+문제가 있을 때 다음 명령으로 Edge Driver 로그를 확인할 수 있습니다.
+
+```powershell
+smartthings edge:drivers
+```
+
+드라이버 ID를 확인한 후:
+
+```powershell
+smartthings edge:drivers:logcat <DRIVER_ID> --hub-address <HUB_IP>
+```
+
+정상 MQTT 연결에서는 다음과 유사한 로그가 표시됩니다.
+
+```text
+BLE MQTT TCP connected
+BLE MQTT CONNACK accepted
+BLE MQTT SUBACK accepted
+BLE MQTT PINGREQ sent
+BLE MQTT PINGRESP OK
+```
+
+### T700i
+
+양치를 시작하면:
+
+```text
+motionSensor = active
+```
+
+양치를 종료하면:
+
+```text
+motionSensor = inactive
+```
+
+정상 세션 종료 로그 예:
+
+```text
+BLE MQTT toothbrush session complete
+start=...
+end=...
+duration=121s
+duration_text=02:01
+score=...
+```
+
+T700i 세션 처리에 대한 자세한 내용은 [`TOOTHBRUSH-SESSION.md`](TOOTHBRUSH-SESSION.md)를 참고하세요.
+
+---
+
+## 문제 해결
+
+### Xiaomi Gateway가 검색되지 않는 경우
+
+- Edge Driver가 해당 Hub에 설치되어 있는지 확인합니다.
+- SmartThings 앱에서 `주변 검색`을 다시 실행합니다.
+- 이미 IP가 비어 있는 `Xiaomi Gateway` 장치가 하나 존재하는지 확인합니다.
+- 미설정 Gateway가 있으면 먼저 해당 장치의 IP를 설정한 후 다시 검색합니다.
+
+### Gateway가 offline으로 표시되는 경우
+
+- `IP address`가 올바른지 확인합니다.
+- SmartThings Hub에서 Xiaomi Gateway로 UDP `54321` 통신이 가능한지 확인합니다.
+- VLAN을 사용하는 경우 Hub와 Gateway 사이의 방화벽/ACL을 확인합니다.
+
+### Auto child discovery가 동작하지 않는 경우
+
+- `Auto child discovery = On`인지 확인합니다.
+- Xiaomi Gateway 자체의 올바른 **32자리 miIO TOKEN**을 입력했는지 확인합니다.
+- BLE 센서는 이 기능으로 등록하지 않습니다. BLE 장치는 MQTT 광고를 통해 동적으로 등록됩니다.
+
+### BLE 장치가 생성되지 않는 경우
+
+- `BLE via MQTT = On`인지 확인합니다.
+- Broker IP와 Port가 맞는지 확인합니다.
+- Xiaomi Gateway에서 openmiio와 MQTT Broker가 정상 실행 중인지 확인합니다.
+- SmartThings Hub에서 MQTT Broker TCP 포트로 접근 가능한지 확인합니다.
+- MQTT에 실제 `miio/report` 또는 `central/report` BLE 이벤트가 들어오는지 확인합니다.
+
+### T700i 점수 또는 배터리가 바로 표시되지 않는 경우
+
+T700i의 점수와 배터리는 항상 같은 BLE 패킷으로 오지 않을 수 있습니다.
+
+- 점수는 양치 종료 이벤트에 포함될 수 있습니다.
+- 배터리는 별도의 MiBeacon 배터리 이벤트로 수신됩니다.
+
+따라서 종료 직후 배터리가 별도로 갱신되는 것은 정상입니다.
+
+---
+
+## 보안 주의사항
+
+- 실제 Gateway TOKEN을 GitHub, README, Issue 또는 로그에 공개하지 마세요.
+- BLE KEY, BLE Bind Key, Gateway Key를 저장소에 기록하지 마세요.
+- 이 드라이버는 설정된 Gateway TOKEN을 logcat에 출력하지 않습니다.
+- 인증 없는 MQTT `1883` 포트를 인터넷에 직접 노출하지 마세요.
+- MQTT Broker는 신뢰할 수 있는 LAN/VLAN 내부에서만 운영하는 것을 권장합니다.
+
+---
+
+## 현재 검증된 항목
+
+실제 SmartThings Hub 환경에서 다음 항목을 확인했습니다.
+
+- Xiaomi Gateway miIO UDP 상태 확인
+- Gateway online/offline 상태 관리
 - MQTT CONNECT / SUBSCRIBE
 - MQTT PINGREQ / PINGRESP 유지
+- MQTT 자동 재연결
 - BLE 온도/습도 이벤트 수신
-- T700i 자동 자식 장치 등록
+- BLE 자식 장치 자동 등록
+- Xiaomi Toothbrush T700i 자동 등록
 - T700i 양치 시작 → `motionSensor active`
 - T700i 양치 종료 → `motionSensor inactive`
-- 양치 시간 계산
-- 양치 점수 처리
-- 배터리 이벤트 처리
+- T700i 양치 시간 계산
+- T700i 점수 처리
+- T700i 배터리 처리
 
-현재 버전:
+---
 
-```text
-v1.10.1-final-verified
-```
+## 참고 및 제한사항
+
+- 본 프로젝트는 Xiaomi 또는 Samsung SmartThings의 공식 드라이버가 아닙니다.
+- Xiaomi Gateway 펌웨어, 지역 버전 또는 하드웨어 리비전에 따라 동작 차이가 있을 수 있습니다.
+- 일부 Xiaomi Gateway에서는 `get_device_list` 또는 `get_device_prop_exp` 사용을 위해 올바른 miIO TOKEN이 필요합니다.
+- BLE 기능은 Xiaomi Gateway 자체 기능만으로 동작하는 것이 아니라 openmiio/MQTT 환경이 필요합니다.
+- 모든 Xiaomi Zigbee/BLE 모델을 지원하는 범용 드라이버가 아닙니다.
+- 지원되지 않는 장치는 Generic child로 등록되거나 실시간 상태가 제공되지 않을 수 있습니다.
+- `sync-ui.ps1`은 저장소의 기존 Custom Capability namespace를 관리하기 위한 유지보수 도구이므로 일반 사용자는 실행하지 않는 것을 권장합니다.
+
+---
+
+## 관련 문서
+
+- [`TOKEN-GUIDE.md`](TOKEN-GUIDE.md) — Xiaomi Gateway miIO TOKEN 설명
+- [`TOOTHBRUSH-SESSION.md`](TOOTHBRUSH-SESSION.md) — T700i 양치 세션 처리
+- [`CHANGELOG.md`](CHANGELOG.md) — 버전별 변경 이력
+
+---
+
+## 라이선스 / 기여
+
+현재 저장소에 별도 LICENSE가 없다면 코드 사용 또는 재배포 전에 저장소 소유자의 조건을 확인하세요.
+
+오류 재현이나 지원 장치 추가에 필요한 정보는 GitHub Issue를 통해 공유할 수 있습니다. 로그를 첨부할 때는 TOKEN, BLE KEY, Gateway Key 등 민감정보가 포함되지 않았는지 반드시 확인하세요.
