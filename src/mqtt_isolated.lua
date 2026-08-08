@@ -20,6 +20,12 @@ local function device_key(device)
   )
 end
 
+local function mqtt_enabled(device)
+  return device and
+    device.preferences and
+    device.preferences.bleMqttEnabled == true
+end
+
 local function make_proxy(device, thread)
   return setmetatable({}, {
     __index = function(_, key)
@@ -84,12 +90,26 @@ function mqtt_isolated.status(device)
 end
 
 function mqtt_isolated.start(driver, device, reason)
-  local context = get_context(driver, device)
+  local context = existing_context(device)
+
+  -- A disabled Gateway never starts the long-running MQTT listener, so there
+  -- is no reason to allocate a separate thread until BLE via MQTT is enabled.
+  if not context and not mqtt_enabled(device) then
+    return mqtt_ble.start(driver, device, reason)
+  end
+
+  context = context or get_context(driver, device)
   return mqtt_ble.start(driver, context.proxy, reason)
 end
 
 function mqtt_isolated.restart(driver, device, reason)
-  local context = get_context(driver, device)
+  local context = existing_context(device)
+
+  if not context and not mqtt_enabled(device) then
+    return mqtt_ble.restart(driver, device, reason)
+  end
+
+  context = context or get_context(driver, device)
   return mqtt_ble.restart(driver, context.proxy, reason)
 end
 
