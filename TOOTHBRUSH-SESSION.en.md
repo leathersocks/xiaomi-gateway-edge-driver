@@ -2,22 +2,62 @@
 
 [한국어](TOOTHBRUSH-SESSION.md)
 
-Observed runtime data used for this design:
+This design is based on behavior observed on the actual SmartThings Hub runtime.
 
 ```text
-start:      type=0, live=true
-normal end: type=1, live=true, score present
-forced end: type!=0 possible, score may be absent
-battery:    separate standard MiBeacon event
+start:                 type=0, current timestamp, live=true
+normal end:            type=1, current timestamp, score present
+forced/early stop:     type=1, previous completed-session timestamp may be reused
+battery:               separate standard MiBeacon event
 ```
 
-For the T700i MiBeacon toothbrush event (EID `0x3003`), `type=0` is treated as brushing start and **any non-zero event type is treated as brushing finish**. Normal completed brushing has been observed with `type=1`, but an early/manual stop may use another non-zero finish code.
+For the T700i MiBeacon toothbrush event (`eid=12291 / 0x3003`), `type=0` means brushing start and **any non-zero event type is an end candidate**.
 
-The previous implementation accepted only `type=1` as finish. That could receive but ignore a forced-stop packet, leaving SmartThings `motionSensor` stuck at `active`. Starting with v1.10.2, every non-zero `0x3003` event is handled as an end event and immediately sets `motionSensor=inactive`.
+v1.10.2 expanded end handling to all non-zero `0x3003` types. v1.10.3 added raw BLE diagnostics so the actual forced-stop packet could be inspected before child resolution and `frmCnt` duplicate suppression.
 
-A dedicated 30-second T700i activity watchdog remains as a final fallback when the end packet itself is lost or cannot be decoded.
+A v1.10.3 forced-stop test revealed this exact pattern:
 
-Starting with v1.10.3, the driver also emits a T700i-specific raw BLE diagnostic log before child lookup and `frmCnt` duplicate suppression. This preserves the original `EID` and `edata` even when multiple Gateways receive the same packet or no SmartThings state event is emitted.
+```text
+start
+frmCnt=234
+gwts=1786207645
+edata=009b5d776a
+type=0
+event_ts=1786207643
+
+forced stop
+frmCnt=236
+gwts=1786207649
+edata=01b920776a
+type=1
+event_ts=1786192057
+```
+
+The forced-stop packet still uses `type=1`, but its embedded `event_ts=1786192057` is the timestamp of the previous completed brushing session instead of the current stop time. The previous 60-second live/history filter therefore classified this packet as historical and left `motionSensor=active` until the 30-second watchdog fired.
+
+## v1.10.4 stale-stop handling
+
+Starting with v1.10.4, a non-zero `0x3003` packet is inferred as the end of the current brushing session when all of the following are true:
+
+- the current T700i session is `active`
+- stored `start_ts > 0`
+- `type != 0`
+- the embedded timestamp is outside the 60-second live window
+- Gateway receive time `gwts` is at or after `start_ts`
+- `gwts - start_ts <= 10 minutes`
+- the advertisement is new after normal `frmCnt` duplicate suppression
+
+When those conditions are met, the raw embedded timestamp is retained for diagnostics while `gwts` is used as the effective end time for state and session calculations.
+
+```text
+raw_event_ts       = stale timestamp carried by the packet
+effective_end_ts   = gwts
+duration           = effective_end_ts - start_ts
+motionSensor       = inactive
+watchdog           = invalidated
+```
+
+For the observed sample, the start timestamp was `1786207643` and the forced-stop receive timestamp was `1786207649`, so the expected duration is about 6 seconds.
 
 ## State machine
 
@@ -32,34 +72,35 @@ BRUSHING
   | keep first start timestamp
   | refresh 30s watchdog
   |
-  | live type!=0
-  | cancel watchdog
-  v
-IDLE + completed session
+  +---- live type!=0 ----------------------+
+  |                                         |
+  +---- stale type!=0 + active session -----+
+        use gwts as effective end timestamp
+                                            v
+                                  IDLE + completed session
 
 BRUSHING
   |
-  | no repeated type=0 advertisement
-  | and no decodable end event for 30s
+  | no decodable end advertisement for 30s
   v
 IDLE + watchdog fallback
 ```
 
-Historical end packets can update metadata only when newer; they never change the current BRUSHING state to IDLE.
+A stale end packet received while no current session is active remains historical and does not change current state. The driver therefore does not treat every old non-zero packet as a live end event.
 
-## Forced-stop handling
+## 30-second watchdog
 
-- A new `live type=0` start event sets `motionSensor=active` and arms a 30-second watchdog.
-- Repeated `type=0` advertisements while brushing refresh the watchdog deadline.
-- A duplicate advertisement with the same `frmCnt` is still ignored for duplicate state processing, but if it contains the T700i `type=0` event it refreshes the watchdog because it confirms that the toothbrush is still active.
-- A `live type!=0` event is treated as a T700i finish event, invalidates the watchdog, and immediately sets `motionSensor=inactive`.
-- Normal completion typically provides `type=1` with a score. An early/manual stop may provide another non-zero type or an end packet without a score.
-- If no end packet is received at all, the watchdog restores `motionSensor=inactive` 30 seconds after the last T700i `type=0` activity advertisement.
-- The watchdog fallback does not invent completion metadata such as end time or score. A later valid end record still follows the existing metadata update rules.
+The T700i activity watchdog remains as the final fallback when the end advertisement itself is lost or cannot be decoded.
+
+- a new live `type=0` start arms the watchdog
+- repeated `type=0` advertisements refresh it
+- a normal live end or a v1.10.4 inferred stale stop invalidates it immediately
+- if no end advertisement arrives, `motionSensor=inactive` is forced after 30 seconds of inactivity
+- watchdog fallback does not invent completion time or score metadata
 
 ## Raw BLE diagnostics
 
-In v1.10.3 and later, each `pdid=6032` packet is logged in this format before duplicate suppression:
+Since v1.10.3, every `pdid=6032` packet is logged before child resolution and `frmCnt` duplicate suppression.
 
 ```text
 BLE MQTT T700i RAW: topic=miio/report did=... mac=... pdid=6032 frmCnt=... gwts=... events=[#1 eid=... eid_hex=... edata=... bytes=... type=... event_ts=...]
@@ -67,33 +108,40 @@ BLE MQTT T700i RAW: topic=miio/report did=... mac=... pdid=6032 frmCnt=... gwts=
 
 Important fields:
 
-- the Gateway/source label at the beginning of the log line
 - `frmCnt`: BLE advertisement sequence
 - `gwts`: Gateway receive timestamp
 - `eid`: Xiaomi MiBeacon event ID
 - `eid_hex`: hexadecimal event ID
-- `edata`: original Gateway payload
+- `edata`: original payload
 - `bytes`: decoded payload length
-- `type`: first byte for `eid=12291 / 0x3003`; `0` means start and non-zero is an end candidate
-- `event_ts`: embedded timestamp decoded from the `0x3003` payload
+- `type`: first byte of the `0x3003` payload
+- `event_ts`: embedded timestamp in the `0x3003` payload
 
-For a forced-stop test, inspect the `T700i RAW` line immediately after pressing the stop/power button.
-
-A non-zero `0x3003` event can be handled immediately:
+When v1.10.4 infers a stale forced stop, an additional diagnostic line is emitted:
 
 ```text
-BLE MQTT T700i RAW: ... eid=12291 eid_hex=0x3003 edata=... type=2 event_ts=...
+BLE MQTT T700i forced stop inferred: ... raw_event_ts=... gwts=... start_ts=... inferred_duration=...s
 ```
 
-If another EID appears instead, that event may represent a separate T700i stop signal and should be analyzed further:
+The state log shows both the raw timestamp and the effective timestamp used by the driver:
 
 ```text
-BLE MQTT T700i RAW: ... eid=<not 12291> eid_hex=... edata=... type=- event_ts=-
+BLE MQTT toothbrush state OK: ...
+type=1
+raw_event_ts=<old timestamp>
+event_ts=<gwts>
+live=true
+raw_delta=<large value>
+delta=0
+forced_stop=true
+duration=...
 ```
 
-If no `T700i RAW` line appears at all after the forced stop, either the toothbrush did not advertise an end event or the Gateway/openmiio path did not forward it; the 30-second watchdog remains necessary in that case.
+The completion log includes the inferred flag as well:
 
-When two Gateways subscribe to the same MQTT broker, the same `frmCnt` can appear once per Gateway in raw diagnostics. This is intentional: raw logging happens before duplicate suppression, while normal SmartThings state processing continues to use the existing duplicate filter.
+```text
+BLE MQTT toothbrush session complete: ... duration=... forced_stop=true raw_event_ts=...
+```
 
 ## Runtime fields
 
@@ -109,36 +157,36 @@ last_activity_ts      runtime Unix UTC
 
 `watchdog_generation` and `last_activity_ts` are non-persistent runtime fields.
 
-## Log verification
+## Verification
 
-Start should include:
-
-```text
-type=0 ... live=true ... start_ts=...
-```
-
-A normal completed brushing usually includes:
+Normal start:
 
 ```text
-type=1 ... live=true ... duration=... duration_text=... score=...
+type=0 ... live=true ... forced_stop=false
+motionSensor=active
 ```
 
-When an early/manual stop uses another finish code, the log may instead show a non-zero type and no score:
+Normal completion:
 
 ```text
-type=<non-zero> ... live=true ... duration=... score=-
+type=1 ... raw_event_ts=<current> event_ts=<current> live=true forced_stop=false
+motionSensor=inactive
+BLE MQTT toothbrush session complete
 ```
 
-A successfully decoded end event is followed by:
+Forced/early stop that reuses the previous completion timestamp:
 
 ```text
-BLE MQTT toothbrush session complete ...
+T700i forced stop inferred
+motionSensor=inactive
+... raw_event_ts=<previous session> event_ts=<gwts> forced_stop=true ...
+BLE MQTT toothbrush session complete ... forced_stop=true
 ```
 
-If the end event itself is lost and the watchdog handles the stop, a warning similar to the following is logged:
+No `watchdog timeout` should follow a successfully inferred forced stop.
+
+Only when the end advertisement itself is absent should the fallback appear:
 
 ```text
 BLE MQTT toothbrush watchdog timeout: ... inactivity=30s ... forcing motion inactive
 ```
-
-Battery may arrive independently after the completed-session event.
