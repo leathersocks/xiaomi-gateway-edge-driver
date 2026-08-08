@@ -1,2 +1,2 @@
-v1.10.7-gateway-profile-refresh
+v1.10.7-final-verified
 2026-08-09
