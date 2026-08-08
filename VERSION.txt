@@ -1,2 +1,2 @@
-v1.10.2-t700i-forced-stop-fix
+v1.10.3-t700i-raw-diagnostics
 2026-08-09
