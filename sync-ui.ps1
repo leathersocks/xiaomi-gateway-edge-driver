@@ -4,8 +4,34 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 
-$Caps = [ordered]@{
-  "locketforest19027.xiaomiGatewayStatus" = "xiaomiGatewayStatus"
+$CapabilityId = "locketforest19027.xiaomiGatewayStatus"
+$ShortId = "xiaomiGatewayStatus"
+
+$Definition = Join-Path $Root "capabilities\$ShortId.json"
+$PresentationTemplate = Join-Path $Root "capabilities\$ShortId-presentation.template.json"
+
+function Invoke-ST {
+  param(
+    [Parameter(Mandatory=$true)]
+    [string[]]$Arguments,
+    [Parameter(Mandatory=$true)]
+    [string]$Description
+  )
+
+  $SmartThingsCmd = Get-Command smartthings.cmd -ErrorAction SilentlyContinue
+
+  Write-Host $Description
+
+  if ($SmartThingsCmd) {
+    & $SmartThingsCmd.Source @Arguments
+  }
+  else {
+    & smartthings @Arguments
+  }
+
+  if ($LASTEXITCODE -ne 0) {
+    throw "$Description failed with exit code $LASTEXITCODE"
+  }
 }
 
 function Write-Utf8NoBom([string]$Path, [string]$Content) {
@@ -13,44 +39,52 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
   [System.IO.File]::WriteAllText($Path, $Content, $Utf8NoBom)
 }
 
-foreach ($CapabilityId in $Caps.Keys) {
-  $ShortId = $Caps[$CapabilityId]
-  $Definition = Join-Path $Root "capabilities\$ShortId.json"
-  $PresentationTemplate = Join-Path $Root "capabilities\$ShortId-presentation.template.json"
+Write-Host ""
+Write-Host "Optional gateway-status UI metadata sync"
+Write-Host "This is NOT required for normal driver package/install."
+Write-Host "Use it only when the existing gateway-status capability UI must be re-applied."
+Write-Host ""
 
-  Write-Host "Updating capability: $CapabilityId"
-  & smartthings capabilities:update `
-    $CapabilityId `
-    --capability-version 1 `
-    -i $Definition
-  if ($LASTEXITCODE -ne 0) { throw "Capability update failed: $CapabilityId" }
+Invoke-ST `
+  -Description "Updating capability: $CapabilityId" `
+  -Arguments @(
+    "capabilities:update",
+    $CapabilityId,
+    "--capability-version", "1",
+    "-i", $Definition
+  )
 
-  foreach ($Tag in @("en", "ko")) {
-    $TranslationFile = Join-Path $Root "translations\$ShortId-$Tag.json"
-    Write-Host "Updating translation [$Tag]: $CapabilityId"
-    & smartthings capabilities:translations:upsert `
-      $CapabilityId `
-      --capability-version 1 `
-      -i $TranslationFile
-    if ($LASTEXITCODE -ne 0) { throw "Translation update failed: $CapabilityId [$Tag]" }
-  }
+foreach ($Tag in @("en", "ko")) {
+  $TranslationFile = Join-Path $Root "translations\$ShortId-$Tag.json"
 
-  $Template = Get-Content $PresentationTemplate -Raw | ConvertFrom-Json
-  $UpdateBody = [ordered]@{
-    dashboard = $Template.dashboard
-    detailView = $Template.detailView
-    automation = $Template.automation
-  }
-  $Temp = Join-Path $env:TEMP "$ShortId-presentation-update.json"
-  Write-Utf8NoBom $Temp ($UpdateBody | ConvertTo-Json -Depth 20)
-
-  Write-Host "Updating presentation: $CapabilityId"
-  & smartthings capabilities:presentation:update `
-    -i $Temp `
-    $CapabilityId `
-    --capability-version 1
-  if ($LASTEXITCODE -ne 0) { throw "Presentation update failed: $CapabilityId" }
+  Invoke-ST `
+    -Description "Updating translation [$Tag]: $CapabilityId" `
+    -Arguments @(
+      "capabilities:translations:upsert",
+      $CapabilityId,
+      "--capability-version", "1",
+      "-i", $TranslationFile
+    )
 }
 
+$Template = Get-Content $PresentationTemplate -Raw | ConvertFrom-Json
+$UpdateBody = [ordered]@{
+  dashboard = $Template.dashboard
+  detailView = $Template.detailView
+  automation = $Template.automation
+}
+
+$Temp = Join-Path $env:TEMP "$ShortId-presentation-update.json"
+Write-Utf8NoBom $Temp ($UpdateBody | ConvertTo-Json -Depth 20)
+
+Invoke-ST `
+  -Description "Updating presentation: $CapabilityId" `
+  -Arguments @(
+    "capabilities:presentation:update",
+    "-i", $Temp,
+    $CapabilityId,
+    "--capability-version", "1"
+  )
+
 Write-Host ""
-Write-Host "SmartThings UI metadata sync completed."
+Write-Host "Gateway-status UI metadata sync completed."

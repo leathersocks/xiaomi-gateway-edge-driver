@@ -1,50 +1,91 @@
-# Xiaomi Gateway Edge Driver v1.8.2-runtime-fix
+# Xiaomi Gateway Edge Driver v1.10.1-final-verified
 
-This release fixes the runtime error found after the dynamic-gateway migration.
+Clean final deployment package based on the runtime-verified v1.10.0 session build.
 
-## Fixes
+## Runtime scope
 
-- Removed the stale `gateway_for_device()` call from `mqtt_ble.start()`.
-- MQTT applicability now means only "this device is a Xiaomi Gateway parent".
-- `BLE via MQTT` is evaluated separately as the enable/disable preference.
-- Turning `BLE via MQTT` Off now stops/invalidate an existing listener first.
-- Dynamic gateway discovery DNI generation no longer needs a bitwise operator.
-- Automatic BLE child registration/parent selection from v1.8.1 is retained.
+Gateway:
+- miIO UDP 54321 health check
+- online / degraded / offline status
+- optional authenticated child discovery
+- optional Zigbee temperature/humidity state polling
+- optional BLE-over-MQTT receiver
 
-## Gateway settings
+BLE:
+- pdid 5860 temperature / humidity / battery
+- pdid 6032 Xiaomi Toothbrush T700i
+- dynamic BLE child registration
+- automatic existing-parent preservation
+- MQTT keepalive and reconnect
 
-```text
-IP address
-Health check interval
-Auto child discovery
-TOKEN
-Zigbee state polling
-Zigbee poll interval
-BLE via MQTT
-BLE MQTT broker IP
-BLE MQTT port
+T700i:
+- live start -> motionSensor active
+- live end -> motionSensor inactive
+- embedded timestamp parsing
+- 60-second live/history filtering
+- first-start preservation
+- session duration calculation
+- last brushing timestamp persistence
+- score persistence
+- battery handling
+- up to 10-minute restart-session recovery
+
+## Final cleanup
+
+The Edge driver ZIP intentionally does not include gateway-side/debug helper tools.
+
+Moved to a separate optional tools archive:
+- install-openmiio-mgl03-v5.py
+- mqtt-ble-probe-v2.py
+- OPENMIIO-SETUP.md
+
+Removed as stale:
+- install-v1.9.2.ps1
+
+The final package uses a version-neutral:
+
+```powershell
+.\install.ps1
 ```
 
-## Automatic BLE
+or direct CLI:
 
-```text
-MQTT BLE event
- -> pdid 5860 + MAC
- -> search all Gateway parents for ble-<MAC>
- -> existing child: preserve parent/name
- -> new child: existing BLE parent, otherwise MQTT source
- -> create automatically
+```powershell
+smartthings edge:drivers:package . --install
 ```
 
-## MQTT
+## Optional UI maintenance
 
-```text
-Topic             #
-Keepalive         30s
-PINGREQ           15s
-PINGRESP timeout  10s
-Receive tick       5s
-Reconnect          3s
-```
+`sync-ui.ps1` is only for re-applying the already-existing
+`locketforest19027.xiaomiGatewayStatus` definition/translations/presentation.
 
-`packageKey` remains `xiaomi-gateway`.
+It is not required for normal package/install.
+
+## Security
+
+- No per-sensor BLE key is embedded.
+- No per-sensor token is embedded.
+- No fixed BLE DID/MAC inventory is embedded.
+- Gateway TOKEN remains a user preference and is not printed to logcat.
+- MQTT is intended for trusted LAN/VLAN use only.
+
+## Final package structure
+
+Runtime:
+- `config.yml`
+- `src/`
+- `profiles/`
+
+Existing gateway-status UI metadata:
+- `capabilities/`
+- `translations/`
+- `sync-ui.ps1`
+
+Distribution:
+- `install.ps1`
+- `README.md`
+- `CHANGELOG.md`
+- `TOKEN-GUIDE.md`
+- `TOOTHBRUSH-SESSION.md`
+- `VERSION.txt`
+- `SHA256SUMS.txt`

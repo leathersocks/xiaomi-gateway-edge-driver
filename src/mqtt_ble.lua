@@ -28,6 +28,19 @@ local EID_TEMPERATURE = 19457
 local EID_HUMIDITY = 19458
 local EID_BATTERY = 18435
 
+local PDID_TEMP_HUMIDITY = 5860
+local PDID_TOOTHBRUSH_T700I = 6032
+local EID_TOOTHBRUSH_EVENT = 12291 -- 0x3003
+local EID_STANDARD_BATTERY = 4106  -- 0x100A
+local TOOTHBRUSH_LIVE_WINDOW_SECONDS = 60
+local TOOTHBRUSH_MAX_SESSION_SECONDS = 10 * 60
+
+local TOOTHBRUSH_ACTIVE_FIELD = "xiaomi_toothbrush_active"
+local TOOTHBRUSH_START_TS_FIELD = "xiaomi_toothbrush_start_timestamp"
+local TOOTHBRUSH_LAST_TS_FIELD = "xiaomi_toothbrush_last_timestamp"
+local TOOTHBRUSH_LAST_SCORE_FIELD = "xiaomi_toothbrush_last_score"
+local TOOTHBRUSH_LAST_DURATION_FIELD = "xiaomi_toothbrush_last_duration"
+
 local function trim(value)
   return tostring(value or ""):match("^%s*(.-)%s*$")
 end
@@ -154,6 +167,47 @@ local function byte_value(hex_value)
   return bytes[1]
 end
 
+
+local function little_u32_from_bytes(bytes, offset)
+  offset = offset or 1
+
+  if not bytes or #bytes < (offset + 3) then
+    return nil
+  end
+
+  return
+    bytes[offset] +
+    (bytes[offset + 1] * 256) +
+    (bytes[offset + 2] * 65536) +
+    (bytes[offset + 3] * 16777216)
+end
+
+local function format_kst(timestamp)
+  timestamp = tonumber(timestamp)
+  if not timestamp or timestamp <= 0 then
+    return nil
+  end
+
+  return os.date(
+    "!%Y-%m-%d %H:%M:%S",
+    timestamp + (9 * 60 * 60)
+  )
+end
+
+
+local function format_duration(seconds)
+  seconds = tonumber(seconds)
+  if not seconds or seconds < 0 then
+    return nil
+  end
+
+  seconds = math.floor(seconds + 0.5)
+  local minutes = math.floor(seconds / 60)
+  local remain = seconds % 60
+
+  return string.format("%02d:%02d", minutes, remain)
+end
+
 local function round(value, digits)
   local factor = 10 ^ (digits or 0)
 
@@ -204,6 +258,193 @@ local function emit_battery(child, value)
   return false
 end
 
+
+local function emit_toothbrush_state(child, value)
+  if not child:supports_capability(capabilities.motionSensor) then
+    return false
+  end
+
+  if value == "brushing" then
+    child:emit_event(
+      capabilities.motionSensor.motion.active()
+    )
+    return true
+  elseif value == "idle" then
+    child:emit_event(
+      capabilities.motionSensor.motion.inactive()
+    )
+    return true
+  end
+
+  return false
+end
+
+local function process_toothbrush_event(
+  child,
+  event,
+  gateway_timestamp
+)
+  local bytes = hex_bytes(event.edata)
+  if not bytes or #bytes < 5 then
+    return 0, nil
+  end
+
+  local event_type = bytes[1]
+  local event_timestamp = little_u32_from_bytes(bytes, 2)
+  local score = #bytes >= 6 and bytes[6] or nil
+
+  if event_type ~= 0 and event_type ~= 1 then
+    return 0, {
+      reason = "unsupported-type",
+      event_type = event_type,
+      timestamp = event_timestamp,
+      score = score,
+    }
+  end
+
+  local reference_timestamp =
+    tonumber(gateway_timestamp) or os.time()
+
+  local delta = event_timestamp and
+    math.abs(reference_timestamp - event_timestamp) or nil
+
+  local is_live =
+    delta ~= nil and
+    delta <= TOOTHBRUSH_LIVE_WINDOW_SECONDS
+
+  local emitted = 0
+
+  -- Read fields into locals before tonumber(). Edge get_field() may return
+  -- zero Lua values for an unset field, so nested tonumber(get_field()) is
+  -- intentionally avoided.
+  local previous_last_raw =
+    child:get_field(TOOTHBRUSH_LAST_TS_FIELD)
+  local previous_last =
+    tonumber(previous_last_raw) or 0
+
+  local active_raw =
+    child:get_field(TOOTHBRUSH_ACTIVE_FIELD)
+  local session_active =
+    active_raw == true
+
+  local start_raw =
+    child:get_field(TOOTHBRUSH_START_TS_FIELD)
+  local session_start =
+    tonumber(start_raw) or 0
+
+  local duration = nil
+  local session_started = false
+  local session_completed = false
+
+  if event_type == 0 then
+    if is_live then
+      -- T700i may repeat start advertisements during one brushing session.
+      -- Preserve the first live start timestamp instead of resetting the
+      -- duration on every repeated type=0 event.
+      local start_valid =
+        session_active and
+        session_start > 0 and
+        event_timestamp and
+        event_timestamp >= session_start and
+        (event_timestamp - session_start) <= TOOTHBRUSH_MAX_SESSION_SECONDS
+
+      if not start_valid then
+        session_start = event_timestamp or reference_timestamp
+
+        child:set_field(
+          TOOTHBRUSH_START_TS_FIELD,
+          session_start,
+          { persist = true }
+        )
+
+        child:set_field(
+          TOOTHBRUSH_ACTIVE_FIELD,
+          true,
+          { persist = true }
+        )
+
+        session_active = true
+        session_started = true
+      end
+
+      if emit_toothbrush_state(child, "brushing") then
+        emitted = emitted + 1
+      end
+    end
+  else
+    -- Only a LIVE end event changes current brushing state or calculates
+    -- duration. Historical replay packets never terminate a live session.
+    if is_live then
+      if emit_toothbrush_state(child, "idle") then
+        emitted = emitted + 1
+      end
+
+      if session_active and
+         session_start > 0 and
+         event_timestamp and
+         event_timestamp >= session_start then
+        local candidate =
+          event_timestamp - session_start
+
+        if candidate >= 0 and
+           candidate <= TOOTHBRUSH_MAX_SESSION_SECONDS then
+          duration = candidate
+
+          child:set_field(
+            TOOTHBRUSH_LAST_DURATION_FIELD,
+            duration,
+            { persist = true }
+          )
+        end
+      end
+
+      child:set_field(
+        TOOTHBRUSH_ACTIVE_FIELD,
+        false,
+        { persist = true }
+      )
+
+      child:set_field(
+        TOOTHBRUSH_START_TS_FIELD,
+        0,
+        { persist = true }
+      )
+
+      session_completed = true
+    end
+
+    -- A historical end record may still be useful metadata if it is newer
+    -- than the last stored completed brushing record.
+    if event_timestamp and event_timestamp > previous_last then
+      child:set_field(
+        TOOTHBRUSH_LAST_TS_FIELD,
+        event_timestamp,
+        { persist = true }
+      )
+
+      if score ~= nil then
+        child:set_field(
+          TOOTHBRUSH_LAST_SCORE_FIELD,
+          score,
+          { persist = true }
+        )
+      end
+    end
+  end
+
+  return emitted, {
+    event_type = event_type,
+    timestamp = event_timestamp,
+    score = score,
+    delta = delta,
+    live = is_live,
+    session_start = session_start,
+    session_started = session_started,
+    session_completed = session_completed,
+    duration = duration,
+  }
+end
+
 local function process_ble_params(driver, source, params, topic)
   if type(params) ~= "table" or type(params.dev) ~= "table" then
     return 0
@@ -214,12 +455,27 @@ local function process_ble_params(driver, source, params, topic)
   local did = trim(dev.did)
   local pdid = tonumber(dev.pdid)
 
-  local child, parent, child_status =
-    child_manager.ensure_ble_temp_humidity_child(
-      driver,
-      source,
-      dev
-    )
+  local child
+  local parent
+  local child_status
+
+  if pdid == PDID_TEMP_HUMIDITY then
+    child, parent, child_status =
+      child_manager.ensure_ble_temp_humidity_child(
+        driver,
+        source,
+        dev
+      )
+  elseif pdid == PDID_TOOTHBRUSH_T700I then
+    child, parent, child_status =
+      child_manager.ensure_ble_toothbrush_child(
+        driver,
+        source,
+        dev
+      )
+  else
+    child_status = "unsupported-pdid"
+  end
 
   if not child then
     if child_status == "created" then
@@ -266,6 +522,90 @@ local function process_ble_params(driver, source, params, topic)
   end
 
   local emitted = 0
+
+  if pdid == PDID_TOOTHBRUSH_T700I then
+    local toothbrush_result = nil
+    local battery = nil
+
+    for _, event in ipairs(params.evt or {}) do
+      local eid = tonumber(event.eid)
+
+      if eid == EID_TOOTHBRUSH_EVENT then
+        local count
+        count, toothbrush_result =
+          process_toothbrush_event(
+            child,
+            event,
+            params.gwts
+          )
+        emitted = emitted + count
+      elseif eid == EID_STANDARD_BATTERY then
+        battery = byte_value(event.edata)
+        if emit_battery(child, battery) then
+          emitted = emitted + 1
+        end
+      end
+    end
+
+    if emitted > 0 then
+      child:online()
+
+      local last_score_raw =
+        child:get_field(TOOTHBRUSH_LAST_SCORE_FIELD)
+      local last_score =
+        tonumber(last_score_raw)
+
+      local last_duration_raw =
+        child:get_field(TOOTHBRUSH_LAST_DURATION_FIELD)
+      local last_duration =
+        tonumber(last_duration_raw)
+
+      local last_timestamp_raw =
+        child:get_field(TOOTHBRUSH_LAST_TS_FIELD)
+      local last_timestamp =
+        tonumber(last_timestamp_raw)
+
+      log.info(string.format(
+        "%s BLE MQTT toothbrush state OK: topic=%s label=%s parent=%s pdid=%s frmCnt=%s type=%s event_ts=%s event_kst=%s live=%s delta=%s start_ts=%s duration=%ss duration_text=%s score=%s last_score=%s last_brushing=%s battery=%s%%",
+        source.label,
+        tostring(topic or ""),
+        child.label,
+        parent and parent.label or "-",
+        tostring(pdid or ""),
+        tostring(sequence or ""),
+        toothbrush_result and tostring(toothbrush_result.event_type) or "-",
+        toothbrush_result and tostring(toothbrush_result.timestamp) or "-",
+        toothbrush_result and format_kst(toothbrush_result.timestamp) or "-",
+        toothbrush_result and tostring(toothbrush_result.live) or "-",
+        toothbrush_result and tostring(toothbrush_result.delta) or "-",
+        toothbrush_result and tostring(toothbrush_result.session_start or "-") or "-",
+        toothbrush_result and tostring(toothbrush_result.duration or "-") or "-",
+        toothbrush_result and format_duration(toothbrush_result.duration) or "-",
+        toothbrush_result and tostring(toothbrush_result.score or "-") or "-",
+        last_score and tostring(last_score) or "-",
+        last_timestamp and format_kst(last_timestamp) or "-",
+        battery and tostring(math.floor(battery + 0.5)) or "-"
+      ))
+
+      if toothbrush_result and
+         toothbrush_result.session_completed and
+         toothbrush_result.live then
+        log.info(string.format(
+          "%s BLE MQTT toothbrush session complete: label=%s start=%s end=%s duration=%ss duration_text=%s score=%s",
+          source.label,
+          child.label,
+          format_kst(toothbrush_result.session_start) or "-",
+          format_kst(toothbrush_result.timestamp) or "-",
+          tostring(toothbrush_result.duration or "-"),
+          format_duration(toothbrush_result.duration) or "-",
+          tostring(toothbrush_result.score or "-")
+        ))
+      end
+    end
+
+    return emitted
+  end
+
   local temperature
   local humidity
   local battery

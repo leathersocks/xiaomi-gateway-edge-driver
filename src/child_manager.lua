@@ -24,7 +24,16 @@ local PROFILE_BY_TYPE = {
 local BLE_TEMP_HUM_PROFILE = "xiaomi-child-temp-hum-v174"
 local BLE_TEMP_HUM_MODEL = "miaomiaoce.sensor_ht.o2"
 local BLE_TEMP_HUM_PDID = 5860
+
+local BLE_TOOTHBRUSH_PROFILE = "xiaomi-child-toothbrush"
+local BLE_TOOTHBRUSH_MODEL = "k0918.toothbrush.t700i"
+local BLE_TOOTHBRUSH_PDID = 6032
+
 local PENDING_BLE_CREATES = {}
+
+local TOOTHBRUSH_ACTIVE_FIELD = "xiaomi_toothbrush_active"
+local TOOTHBRUSH_START_TS_FIELD = "xiaomi_toothbrush_start_timestamp"
+local TOOTHBRUSH_RESTORE_WINDOW_SECONDS = 10 * 60
 
 local function trim(value)
   return tostring(value or ""):match("^%s*(.-)%s*$")
@@ -70,6 +79,54 @@ end
 function child_manager.initialize_child(child)
   child:online()
   emit_presence(child, "present")
+
+  -- Toothbrush restart/session recovery is intentionally model-scoped.
+  -- Generic Xiaomi motion children also expose motionSensor, but they must
+  -- not be reset to inactive by toothbrush-specific state restoration.
+  if tostring(child.model or "") == BLE_TOOTHBRUSH_MODEL and
+     child:supports_capability(capabilities.motionSensor) then
+    local active_raw =
+      child:get_field(TOOTHBRUSH_ACTIVE_FIELD)
+
+    local start_raw =
+      child:get_field(TOOTHBRUSH_START_TS_FIELD)
+
+    local start_ts =
+      tonumber(start_raw) or 0
+
+    local now =
+      os.time()
+
+    local restore_active =
+      active_raw == true and
+      start_ts > 0 and
+      now >= start_ts and
+      (now - start_ts) <= TOOTHBRUSH_RESTORE_WINDOW_SECONDS
+
+    if restore_active then
+      child:emit_event(
+        capabilities.motionSensor.motion.active()
+      )
+    else
+      child:emit_event(
+        capabilities.motionSensor.motion.inactive()
+      )
+
+      if active_raw == true or start_ts > 0 then
+        child:set_field(
+          TOOTHBRUSH_ACTIVE_FIELD,
+          false,
+          { persist = true }
+        )
+
+        child:set_field(
+          TOOTHBRUSH_START_TS_FIELD,
+          0,
+          { persist = true }
+        )
+      end
+    end
+  end
 end
 
 function child_manager.sync_definitions(driver, parent, definitions, source)
@@ -188,12 +245,13 @@ function child_manager.ble_child_key(mac)
   return "ble-" .. normalized
 end
 
-local function is_ble_temp_humidity_child(child)
+local function is_supported_ble_child(child)
   if not child then
     return false
   end
 
-  if tostring(child.model or "") == BLE_TEMP_HUM_MODEL then
+  local model = tostring(child.model or "")
+  if model == BLE_TEMP_HUM_MODEL or model == BLE_TOOTHBRUSH_MODEL then
     return true
   end
 
@@ -228,7 +286,7 @@ local function find_gateway_with_existing_ble_children(driver)
       local count = 0
 
       for _, child in ipairs(parent:get_child_list() or {}) do
-        if is_ble_temp_humidity_child(child) then
+        if is_supported_ble_child(child) then
           count = count + 1
         end
       end
@@ -273,13 +331,23 @@ function child_manager.select_ble_parent(driver, source_gateway)
   return nil, "no-gateway"
 end
 
-function child_manager.ensure_ble_temp_humidity_child(driver, source_gateway, dev)
+
+local function ensure_supported_ble_child(
+  driver,
+  source_gateway,
+  dev,
+  expected_pdid,
+  profile,
+  model,
+  label_prefix,
+  log_type
+)
   if type(dev) ~= "table" then
     return nil, nil, "invalid-device"
   end
 
   local pdid = tonumber(dev.pdid)
-  if pdid ~= BLE_TEMP_HUM_PDID then
+  if pdid ~= expected_pdid then
     return nil, nil, "unsupported-pdid"
   end
 
@@ -317,11 +385,12 @@ function child_manager.ensure_ble_temp_humidity_child(driver, source_gateway, de
   PENDING_BLE_CREATES[key] = now
 
   local suffix = mac:sub(-4)
-  local label = "BLE 온습도 " .. suffix
+  local label = label_prefix .. " " .. suffix
 
   log.info(string.format(
-    "%s automatically registering BLE temp/humidity child: key=%s did=%s mac=%s pdid=%s parent_reason=%s",
+    "%s automatically registering BLE %s child: key=%s did=%s mac=%s pdid=%s parent_reason=%s",
     parent.label,
+    log_type,
     key,
     did,
     mac,
@@ -333,11 +402,11 @@ function child_manager.ensure_ble_temp_humidity_child(driver, source_gateway, de
     driver:try_create_device({
       type = "EDGE_CHILD",
       label = label,
-      profile = BLE_TEMP_HUM_PROFILE,
+      profile = profile,
       parent_device_id = parent.id,
       parent_assigned_child_key = key,
       manufacturer = "Xiaomi",
-      model = BLE_TEMP_HUM_MODEL,
+      model = model,
       vendor_provided_label = label,
       external_id = did ~= "" and did or key,
     })
@@ -347,8 +416,9 @@ function child_manager.ensure_ble_temp_humidity_child(driver, source_gateway, de
     PENDING_BLE_CREATES[key] = nil
 
     log.warn(string.format(
-      "%s BLE child automatic registration failed: key=%s reason=%s",
+      "%s BLE %s child automatic registration failed: key=%s reason=%s",
       parent.label,
+      log_type,
       key,
       tostring(err)
     ))
@@ -357,6 +427,32 @@ function child_manager.ensure_ble_temp_humidity_child(driver, source_gateway, de
   end
 
   return nil, parent, "created"
+end
+
+function child_manager.ensure_ble_temp_humidity_child(driver, source_gateway, dev)
+  return ensure_supported_ble_child(
+    driver,
+    source_gateway,
+    dev,
+    BLE_TEMP_HUM_PDID,
+    BLE_TEMP_HUM_PROFILE,
+    BLE_TEMP_HUM_MODEL,
+    "BLE 온습도",
+    "temp/humidity"
+  )
+end
+
+function child_manager.ensure_ble_toothbrush_child(driver, source_gateway, dev)
+  return ensure_supported_ble_child(
+    driver,
+    source_gateway,
+    dev,
+    BLE_TOOTHBRUSH_PDID,
+    BLE_TOOTHBRUSH_PROFILE,
+    BLE_TOOTHBRUSH_MODEL,
+    "BLE 칫솔",
+    "toothbrush"
+  )
 end
 
 return child_manager

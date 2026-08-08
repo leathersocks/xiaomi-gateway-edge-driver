@@ -29,7 +29,7 @@ preferences:
 - title: Auto child discovery
   name: autoChildDiscovery
   description: Discover non-BLE Xiaomi child devices over authenticated miIO. Requires
-    TOKEN. Known BLE sensor registration is independent.
+    TOKEN. BLE MQTT children are registered dynamically.
   required: false
   preferenceType: boolean
   definition:

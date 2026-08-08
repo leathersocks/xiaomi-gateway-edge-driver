@@ -1,7 +1,7 @@
 name: Xiaomi Gateway
 packageKey: xiaomi-gateway
-description: Dynamic Xiaomi gateway driver with automatic BLE parent selection and
-  fixed MQTT lifecycle runtime
+description: Final verified dynamic Xiaomi gateway Edge driver with BLE temperature/humidity
+  and T700i toothbrush session support
 vendorSupportInformation: Community experimental driver
 permissions:
   lan: {}
