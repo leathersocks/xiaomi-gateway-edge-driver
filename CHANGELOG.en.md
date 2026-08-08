@@ -11,6 +11,18 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.10.8-final-verified — 2026-08-09
+
+- Fixed a concurrency issue where the long-running BLE MQTT listener occupied the Gateway `device.thread`, preventing the MQTT-receiver Gateway's periodic miIO Health Check from running.
+- Added `src/mqtt_isolated.lua` so the MQTT listener/reconnect/keepalive loop runs on a dedicated `st.thread.Thread`.
+- Gateways with `BLE via MQTT` disabled do not allocate an unnecessary dedicated MQTT thread and continue using the normal device thread.
+- Verified on the actual Hub that `미홈 2rd BLE MQTT dedicated thread created: device_thread_isolated=true` is emitted and MQTT connects normally.
+- Verified that `미홈 2rd miIO health check OK: source=scheduled` resumes at approximately 60-second intervals while MQTT `PINGREQ / PINGRESP` continues uninterrupted.
+- Verified that BLE temperature/humidity events continue to be received and reflected in SmartThings after the thread isolation change.
+- During the verification interval, MQTT connectivity and periodic Health Check ran concurrently without disconnects, `WARN`, or `ERROR` entries.
+- T700i processing logic was not changed. The v1.10.8 verification log did not include a T700i brushing event; the previously verified v1.10.4-v1.10.7 forced-stop and watchdog logic remains unchanged.
+- Marked this release as `v1.10.8-final-verified` as of 2026-08-09.
+
 ## v1.10.7-final-verified — 2026-08-09
 
 - Finalized and verified Korean display for the Gateway status Custom Capability.
@@ -524,5 +536,5 @@ v1.8.x   Dynamic Gateway / automatic BLE parent
    ↓
 v1.9.x   Xiaomi Toothbrush T700i support
    ↓
-v1.10.x  T700i session/forced-stop handling + Gateway status localization and final verification
+v1.10.x  T700i session/forced-stop handling + Gateway status localization + MQTT thread isolation / concurrent Health Check verification
 ```
