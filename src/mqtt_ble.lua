@@ -423,14 +423,12 @@ local function process_toothbrush_event(
   local event_timestamp = little_u32_from_bytes(bytes, 2)
   local score = #bytes >= 6 and bytes[6] or nil
 
-  if event_type ~= 0 and event_type ~= 1 then
-    return 0, {
-      reason = "unsupported-type",
-      event_type = event_type,
-      timestamp = event_timestamp,
-      score = score,
-    }
-  end
+  -- Xiaomi MiBeacon toothbrush events use 0 for brushing start and a
+  -- non-zero event type for brushing finish. Normal T700i sessions have
+  -- been observed with type=1, while an early/manual stop may use another
+  -- non-zero finish code. Treat every non-zero 0x3003 type as an end event
+  -- so a forced stop is reflected immediately instead of waiting for the
+  -- watchdog fallback.
 
   local reference_timestamp =
     tonumber(gateway_timestamp) or os.time()
