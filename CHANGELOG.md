@@ -11,6 +11,18 @@
 
 ---
 
+## v1.10.8-final-verified — 2026-08-09
+
+- 장시간 실행되는 BLE MQTT listener가 Gateway의 `device.thread`를 점유해 MQTT receiver Gateway의 주기적 miIO Health Check가 실행되지 않던 문제를 수정했습니다.
+- `src/mqtt_isolated.lua`를 추가해 MQTT listener/reconnect/keepalive 처리를 전용 `st.thread.Thread`에서 실행하도록 분리했습니다.
+- `BLE via MQTT`가 꺼진 Gateway는 불필요한 전용 Thread를 생성하지 않고 기존 device thread를 그대로 사용합니다.
+- 실제 Hub 런타임에서 `미홈 2rd BLE MQTT dedicated thread created: device_thread_isolated=true` 로그와 MQTT 정상 연결을 확인했습니다.
+- MQTT `PINGREQ / PINGRESP`가 계속 동작하는 동안 `미홈 2rd miIO health check OK: source=scheduled`가 약 60초 주기로 정상 실행되는 것을 확인했습니다.
+- Thread 분리 후에도 BLE 온습도 이벤트 수신과 SmartThings 상태 반영이 정상적으로 유지되는 것을 확인했습니다.
+- 검증 구간에서 MQTT disconnect, `WARN`, `ERROR` 없이 연결과 Health Check가 동시에 유지됐습니다.
+- T700i 처리 로직은 변경하지 않았으며, 이번 v1.10.8 검증 로그에는 T700i 양치 이벤트가 포함되지 않았습니다. 이전 v1.10.4~v1.10.7에서 검증된 강제정지 및 watchdog 로직은 그대로 유지합니다.
+- 이 버전을 2026-08-09 기준 `v1.10.8-final-verified`로 확정했습니다.
+
 ## v1.10.7-final-verified — 2026-08-09
 
 - Gateway 상태 Custom Capability의 한글 표시를 최종 검증했습니다.
@@ -523,5 +535,5 @@ v1.8.x   동적 Gateway / 자동 BLE parent
    ↓
 v1.9.x   Xiaomi Toothbrush T700i 지원
    ↓
-v1.10.x  T700i 세션/강제정지 + Gateway 상태 한글화 및 최종 검증
+v1.10.x  T700i 세션/강제정지 + Gateway 상태 한글화 + MQTT Thread 분리/Health Check 동시성 검증
 ```
