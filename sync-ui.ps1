@@ -55,7 +55,7 @@ Invoke-ST `
     "-i", $Definition
   )
 
-foreach ($Tag in @("en", "ko")) {
+foreach ($Tag in @("en", "ko", "ko-KR")) {
   $TranslationFile = Join-Path $Root "translations\$ShortId-$Tag.json"
 
   Invoke-ST `
@@ -89,4 +89,5 @@ Invoke-ST `
 
 Write-Host ""
 Write-Host "Gateway-status UI metadata sync completed."
-Write-Host "Korean values expected: online=연결됨, degraded=연결 불안정, offline=연결 안됨"
+Write-Host "Korean locales uploaded: ko, ko-KR"
+Write-Host "Expected values: online=CONNECTED(Korean), degraded=UNSTABLE(Korean), offline=DISCONNECTED(Korean)"
