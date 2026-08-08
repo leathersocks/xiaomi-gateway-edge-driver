@@ -14,9 +14,48 @@ local DEFAULT_INTERVAL = 60
 local PROBE_TIMEOUT = 3
 local FAILURE_THRESHOLD = 3
 local AUTO_DISCOVERY_INTERVAL = 300
+local GATEWAY_PROFILE_NAME = "xiaomi-gateway"
+local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1107"
 
 local function is_gateway_device(device)
   return gateway_runtime.is_gateway(device)
+end
+
+local function refresh_gateway_profile(device)
+  local refreshed = device:get_field(GATEWAY_PROFILE_REFRESH_FIELD)
+  if refreshed == true then
+    return false
+  end
+
+  local ok, err = pcall(function()
+    device:try_update_metadata({
+      profile = GATEWAY_PROFILE_NAME,
+    })
+  end)
+
+  if not ok then
+    log.warn(string.format(
+      "%s gateway profile refresh failed: profile=%s reason=%s",
+      tostring(device.label or device.id),
+      GATEWAY_PROFILE_NAME,
+      tostring(err)
+    ))
+    return false
+  end
+
+  device:set_field(
+    GATEWAY_PROFILE_REFRESH_FIELD,
+    true,
+    { persist = true }
+  )
+
+  log.info(string.format(
+    "%s gateway profile refresh requested: profile=%s reason=presentation-i18n-refresh",
+    tostring(device.label or device.id),
+    GATEWAY_PROFILE_NAME
+  ))
+
+  return true
 end
 
 local function get_ip(device)
@@ -287,6 +326,7 @@ local function added_handler(driver, device)
     return
   end
 
+  refresh_gateway_profile(device)
   log_configuration(device)
   diagnostics.emit_cached(device, get_ip(device))
   start_services(driver, device, "added")
@@ -298,6 +338,7 @@ local function init_handler(driver, device)
     return
   end
 
+  refresh_gateway_profile(device)
   diagnostics.emit_cached(device, get_ip(device))
   start_services(driver, device, "init")
 end
