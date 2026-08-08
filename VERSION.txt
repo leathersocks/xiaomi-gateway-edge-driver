@@ -1,2 +1,2 @@
-v1.10.3-t700i-raw-diagnostics
+v1.10.4-t700i-stale-stop-fix
 2026-08-09
