@@ -408,6 +408,49 @@ local function refresh_duplicate_toothbrush_watchdog(child, params, source_label
   return false
 end
 
+local function log_toothbrush_raw_packet(source, params, topic)
+  local dev = params.dev or {}
+  local events = {}
+
+  for index, event in ipairs(params.evt or {}) do
+    local eid = tonumber(event.eid)
+    local edata = trim(event.edata)
+    local bytes = hex_bytes(edata)
+    local event_type = nil
+    local event_timestamp = nil
+
+    if eid == EID_TOOTHBRUSH_EVENT and bytes and #bytes >= 1 then
+      event_type = bytes[1]
+      if #bytes >= 5 then
+        event_timestamp = little_u32_from_bytes(bytes, 2)
+      end
+    end
+
+    events[#events + 1] = string.format(
+      "#%d eid=%s eid_hex=%s edata=%s bytes=%s type=%s event_ts=%s",
+      index,
+      tostring(eid or event.eid or "-"),
+      eid and string.format("0x%04X", eid) or "-",
+      edata ~= "" and edata or "-",
+      bytes and tostring(#bytes) or "-",
+      event_type ~= nil and tostring(event_type) or "-",
+      event_timestamp and tostring(event_timestamp) or "-"
+    )
+  end
+
+  log.info(string.format(
+    "%s BLE MQTT T700i RAW: topic=%s did=%s mac=%s pdid=%s frmCnt=%s gwts=%s events=[%s]",
+    tostring(source.label or "Xiaomi Gateway"),
+    tostring(topic or ""),
+    tostring(dev.did or ""),
+    tostring(dev.mac or ""),
+    tostring(dev.pdid or ""),
+    tostring(params.frmCnt or ""),
+    tostring(params.gwts or ""),
+    #events > 0 and table.concat(events, " | ") or "-"
+  ))
+end
+
 local function process_toothbrush_event(
   child,
   event,
@@ -590,6 +633,13 @@ local function process_ble_params(driver, source, params, topic)
   local mac = normalize_mac(dev.mac)
   local did = trim(dev.did)
   local pdid = tonumber(dev.pdid)
+
+  -- Log raw T700i data before child resolution and frmCnt duplicate
+  -- suppression so forced-stop packets can be inspected even when no
+  -- SmartThings state event is emitted.
+  if pdid == PDID_TOOTHBRUSH_T700I then
+    log_toothbrush_raw_packet(source, params, topic)
+  end
 
   local child
   local parent
