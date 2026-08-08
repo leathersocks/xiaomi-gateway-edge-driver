@@ -11,6 +11,47 @@
 
 ---
 
+## v1.10.7-final-verified — 2026-08-09
+
+- Gateway 상태 Custom Capability의 한글 표시를 최종 검증했습니다.
+- 기존 Gateway 장치가 이전 Device Presentation/프로필을 계속 참조하는 문제를 해결하기 위해 시작 시 `device:try_update_metadata({ profile = "xiaomi-gateway" })`로 프로필 갱신을 요청하도록 했습니다.
+- 프로필 갱신은 버전별 persistent marker를 사용해 Gateway 장치당 한 번만 수행되도록 했습니다.
+- `online / degraded / offline` 상태가 SmartThings 앱에서 각각 `연결됨 / 연결 불안정 / 연결 안됨`으로 표시되는 것을 실제 앱에서 확인했습니다.
+- `ko`와 `ko-KR` 번역, Capability Presentation, Embedded Device Configuration 및 기존 장치 프로필 갱신 경로를 함께 검증했습니다.
+- T700i 강제정지 stale timestamp 보정, 즉시 `motionSensor=inactive` 전환 및 30초 watchdog fallback 동작을 포함한 v1.10.4 이후 수정사항을 유지합니다.
+- 이 버전을 2026-08-09 기준 최종 검증 버전으로 확정했습니다.
+
+## v1.10.6-gateway-presentation-refresh — 2026-08-09
+
+- Gateway 상태 번역이 클라우드에 정상 업로드되어도 기존 Device Presentation에서 영어로 남는 문제를 해결하기 위한 중간 수정본입니다.
+- `ko-KR` locale 번역 파일을 추가해 `online / degraded / offline`을 `연결됨 / 연결 불안정 / 연결 안됨`으로 정의했습니다.
+- Gateway 프로필의 Custom Capability에 Embedded Device Configuration(`config.values.enabledValues`)을 추가해 Edge Driver 패키징 시 새로운 Device Presentation 생성을 유도했습니다.
+- Capability 번역과 Presentation 업로드 자체는 정상 동작했으나 기존 장치가 이전 VID/프로필을 계속 사용할 수 있어 후속 v1.10.7에서 장치 프로필 재적용을 추가했습니다.
+
+## v1.10.5-gateway-status-i18n-fix — 2026-08-09
+
+- `translations/xiaomiGatewayStatus-ko.json`의 한글 값이 SmartThings 앱에 표시되지 않는 문제를 수정하기 위한 첫 단계입니다.
+- Capability Presentation의 Dashboard/Detail View에 `alternatives`를 추가하고 `{{i18n.attributes.gatewayStatus.i18n.value.<state>.label}}` 경로를 사용하도록 변경했습니다.
+- `install.ps1`이 `sync-ui.ps1`을 기본 실행하도록 변경해 Capability 정의, EN/KO 번역 및 Presentation을 Edge Driver 설치 전에 SmartThings 클라우드에 동기화하도록 했습니다.
+- `sync-ui.ps1` 안내를 실제 동작에 맞게 정리하고 UI 동기화를 명시적인 설치 단계로 통합했습니다.
+- 클라우드 번역/Presentation 업데이트는 성공했지만 기존 Device Presentation 캐시/VID 때문에 앱에서는 영어가 계속 표시되어 후속 수정이 필요했습니다.
+
+## v1.10.4-t700i-stale-stop-fix — 2026-08-09
+
+- T700i 강제정지 패킷에서 `frmCnt`와 Gateway timestamp(`gwts`)는 현재 값인데 EID `0x3003` 내부 timestamp가 이전 완료 양치 시각으로 재전송되는 실제 패턴을 처리했습니다.
+- 기존 60초 live/history 필터가 이 stale timestamp 때문에 강제정지 `type=1` 이벤트를 history로 분류하고 무시하던 문제를 수정했습니다.
+- 활성 세션 중 non-zero 종료 이벤트가 들어오고 embedded timestamp만 stale인 경우 `gwts`를 유효 종료 시각으로 추론합니다.
+- 추론된 강제정지는 즉시 `motionSensor=inactive`를 발생시키고 watchdog을 무효화합니다.
+- raw embedded timestamp는 진단용으로 보존하고 실제 세션 종료/마지막 양치 시각/양치 시간 계산에는 `gwts`를 사용합니다.
+- 실제 Hub 런타임에서 시작 후 약 10초 강제정지 시 `forced_stop=true`, `duration=10s`, 즉시 `inactive`, 이후 watchdog timeout 미발생을 확인했습니다.
+
+## v1.10.3-t700i-raw-diagnostics — 2026-08-09
+
+- T700i 강제정지 문제의 실제 BLE 패킷 구조를 확인하기 위한 RAW 진단 로그를 추가했습니다.
+- `pdid=6032` 패킷에 대해 child resolution 및 `frmCnt` 중복 억제 이전에 topic, DID, MAC, pdid, frmCnt, gwts와 각 event의 EID/edata/type/event timestamp를 기록하도록 했습니다.
+- 진단 결과 강제정지 패킷 자체는 fresh `frmCnt`/`gwts`와 `type=1`로 수신되지만 embedded event timestamp가 이전 완료 양치 시각을 가리킨다는 것을 확인했습니다.
+- 이 결과를 기반으로 v1.10.4에서 stale timestamp 강제정지 추론 로직을 추가했습니다.
+
 ## v1.10.2-t700i-forced-stop-fix — 2026-08-09
 
 - T700i가 동작 중 사용자가 강제/조기 정지했을 때 SmartThings `motionSensor`가 `active` 상태에 남을 수 있는 문제를 수정했습니다.
@@ -482,5 +523,5 @@ v1.8.x   동적 Gateway / 자동 BLE parent
    ↓
 v1.9.x   Xiaomi Toothbrush T700i 지원
    ↓
-v1.10.x  양치 세션 추적, 강제 정지 처리 및 배포 검증
+v1.10.x  T700i 세션/강제정지 + Gateway 상태 한글화 및 최종 검증
 ```
