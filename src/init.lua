@@ -1,43 +1,34 @@
 local Driver = require "st.driver"
-local capabilities = require "st.capabilities"
 local log = require "log"
 
 local discovery = require "discovery"
-local gateways = require "gateways"
 local miio_probe = require "miio_probe"
 local diagnostics = require "diagnostics"
 local child_manager = require "child_manager"
+local auto_discovery = require "auto_discovery"
+local child_state = require "child_state"
+local mqtt_ble = require "mqtt_ble"
+local gateway_runtime = require "gateway_runtime"
 
 local DEFAULT_INTERVAL = 60
-local DEFAULT_TIMEOUT = 3
-local DEFAULT_FAILURE_THRESHOLD = 3
+local PROBE_TIMEOUT = 3
+local FAILURE_THRESHOLD = 3
+local AUTO_DISCOVERY_INTERVAL = 300
 
-local LAST_PRESENCE_FIELD = "xiaomi_gateway_last_presence"
-local LAST_HEALTH_FIELD = "xiaomi_gateway_last_health"
-
-local function gateway_definition(device)
-  for _, gateway in ipairs(gateways) do
-    if gateway.dni == device.device_network_id then
-      return gateway
-    end
-  end
-
-  return nil
+local function is_gateway_device(device)
+  return gateway_runtime.is_gateway(device)
 end
 
 local function get_ip(device)
-  if not device.preferences then
-    return ""
-  end
-
-  return tostring(device.preferences.gatewayIp or ""):match("^%s*(.-)%s*$")
+  return gateway_runtime.gateway_ip(device)
 end
 
 local function get_interval(device)
   local interval = DEFAULT_INTERVAL
 
   if device.preferences then
-    interval = tonumber(device.preferences.checkInterval) or DEFAULT_INTERVAL
+    interval =
+      tonumber(device.preferences.checkInterval) or DEFAULT_INTERVAL
   end
 
   if interval < 30 then
@@ -49,164 +40,97 @@ local function get_interval(device)
   return interval
 end
 
-local function get_timeout(device)
-  local timeout = DEFAULT_TIMEOUT
-
-  if device.preferences then
-    timeout = tonumber(device.preferences.probeTimeout) or DEFAULT_TIMEOUT
-  end
-
-  if timeout < 1 then
-    return 1
-  elseif timeout > 10 then
-    return 10
-  end
-
-  return timeout
-end
-
-local function get_failure_threshold(device)
-  local threshold = DEFAULT_FAILURE_THRESHOLD
-
-  if device.preferences then
-    threshold =
-      tonumber(device.preferences.failureThreshold) or DEFAULT_FAILURE_THRESHOLD
-  end
-
-  if threshold < 1 then
-    return 1
-  elseif threshold > 5 then
-    return 5
-  end
-
-  return threshold
-end
-
 local function local_now()
-  -- Korea Standard Time (UTC+9). Korea does not observe DST.
   return os.date("!%H:%M:%S", os.time() + (9 * 60 * 60))
 end
 
-local function emit_presence(device, value, force)
-  local previous = device:get_field(LAST_PRESENCE_FIELD)
-  if force or previous ~= value then
-    device:set_field(LAST_PRESENCE_FIELD, value, { persist = false })
-    device:emit_event(capabilities.presenceSensor.presence(value))
-  end
-end
-
-local function emit_health(device, value, force)
-  local previous = device:get_field(LAST_HEALTH_FIELD)
-  if force or previous ~= value then
-    device:set_field(LAST_HEALTH_FIELD, value, { persist = false })
-    device:emit_event(capabilities.healthCheck.healthStatus(value))
-  end
-end
-
-local function emit_check_interval(device)
-  local interval = get_interval(device)
-  local threshold = get_failure_threshold(device)
-  local platform_interval = math.min(
-    604800,
-    math.max(60, (interval * threshold) + get_timeout(device) + 15)
-  )
-
-  device:emit_event(capabilities.healthCheck.checkInterval(platform_interval))
-end
-
-local function set_online(device, force)
+local function set_online(device)
   device:online()
-  emit_presence(device, "present", force)
-  emit_health(device, "online", force)
   child_manager.set_children_reachable(device, true)
 end
 
-local function set_offline(device, force)
+local function set_offline(device)
   child_manager.set_children_reachable(device, false)
-  emit_presence(device, "not present", force)
-  emit_health(device, "offline", force)
   device:offline()
 end
 
-local function check_gateway(device, source, force)
-  local gateway = gateway_definition(device)
-  if not gateway then
-    log.warn(string.format("%s: gateway definition not found", device.label))
-    set_offline(device, true)
-    return false
-  end
-
+local function check_gateway(device, source)
   local ip = get_ip(device)
+
   if ip == "" then
+    diagnostics.record_failure(device, ip, 1)
+    set_offline(device)
     log.warn(string.format(
-      "%s health check skipped: gatewayIp is not configured",
+      "%s health check skipped: IP address is not configured",
       device.label
     ))
-    diagnostics.record_failure(device, ip, 1)
-    set_offline(device, true)
     return false
   end
 
   if not miio_probe.valid_ipv4(ip) then
+    diagnostics.record_failure(device, ip, 1)
+    set_offline(device)
     log.warn(string.format(
       "%s health check failed: invalid IPv4 address '%s'",
       device.label,
       ip
     ))
-    diagnostics.record_failure(device, ip, 1)
-    set_offline(device, true)
     return false
   end
 
-  local ok, result = miio_probe.check(ip, get_timeout(device))
+  local ok, result = miio_probe.check(ip, PROBE_TIMEOUT)
 
   if ok then
     local last_seen = local_now()
+
     diagnostics.record_success(device, ip, result, last_seen)
-    set_online(device, force == true)
+    set_online(device)
 
     log.info(string.format(
-      "%s miIO health check OK: source=%s model=%s ip=%s port=%s device_id=%s latency=%dms last_seen=%s timestamp=%s",
+      "%s miIO health check OK: source=%s ip=%s port=%s device_id=%s latency=%dms last_seen=%s timestamp=%s role=%s",
       device.label,
       tostring(source or "unknown"),
-      gateway.model,
       tostring(result.ip),
       tostring(result.port),
       tostring(result.device_id or ""),
       tonumber(result.latency_ms) or 0,
       last_seen,
-      tostring(result.timestamp or "")
+      tostring(result.timestamp or ""),
+      gateway_runtime.role_summary(device)
     ))
+
     return true
   end
 
-  local threshold = get_failure_threshold(device)
-  local failures = diagnostics.record_failure(device, ip, threshold)
+  local failures =
+    diagnostics.record_failure(
+      device,
+      ip,
+      FAILURE_THRESHOLD
+    )
 
-  if failures >= threshold then
-    set_offline(device, force == true)
+  if failures >= FAILURE_THRESHOLD then
+    set_offline(device)
+
     log.warn(string.format(
-      "%s miIO health check FAILED/OFFLINE: source=%s model=%s ip=%s port=%s failures=%d/%d reason=%s",
+      "%s miIO health check FAILED/OFFLINE: source=%s ip=%s failures=%d/%d reason=%s",
       device.label,
       tostring(source or "unknown"),
-      gateway.model,
       ip,
-      tostring(result and result.port or 54321),
       failures,
-      threshold,
+      FAILURE_THRESHOLD,
       tostring(result and result.reason or "unknown error")
     ))
   else
-    -- A single UDP loss should not immediately flap the SmartThings device offline.
-    set_online(device, false)
+    set_online(device)
+
     log.warn(string.format(
-      "%s miIO health check DEGRADED: source=%s model=%s ip=%s failures=%d/%d reason=%s",
+      "%s miIO health check DEGRADED: source=%s ip=%s failures=%d/%d reason=%s",
       device.label,
       tostring(source or "unknown"),
-      gateway.model,
       ip,
       failures,
-      threshold,
+      FAILURE_THRESHOLD,
       tostring(result and result.reason or "unknown error")
     ))
   end
@@ -214,85 +138,158 @@ local function check_gateway(device, source, force)
   return false
 end
 
-local function cancel_health_timer(device)
-  local timer = device.transient_store and device.transient_store.health_timer
+local function cancel_timer(device, field)
+  local timer =
+    device.transient_store and device.transient_store[field]
+
   if timer then
     pcall(function()
       device.thread:cancel_timer(timer)
     end)
-    device.transient_store.health_timer = nil
+    device.transient_store[field] = nil
   end
 end
 
 local function schedule_health_check(device)
-  cancel_health_timer(device)
+  cancel_timer(device, "health_timer")
 
   local interval = get_interval(device)
-  local timer = device.thread:call_on_schedule(
-    interval,
-    function()
-      check_gateway(device, "scheduled", false)
-    end,
-    "xiaomi gateway miIO health check"
-  )
 
-  device.transient_store.health_timer = timer
-  emit_check_interval(device)
+  device.transient_store.health_timer =
+    device.thread:call_on_schedule(
+      interval,
+      function()
+        check_gateway(device, "scheduled")
+      end,
+      "xiaomi gateway miIO health check"
+    )
 
   log.info(string.format(
-    "%s health check scheduled every %d seconds; offline threshold=%d failures",
+    "%s health check scheduled: interval=%ds timeout=%ds offline_after=%d failures",
     device.label,
     interval,
-    get_failure_threshold(device)
+    PROBE_TIMEOUT,
+    FAILURE_THRESHOLD
   ))
 end
 
-local function log_configuration(device)
-  local gateway = gateway_definition(device)
-  if not gateway then
+local function run_child_sync(driver, device, source)
+  auto_discovery.sync(driver, device, source)
+
+  if child_state.enabled(device) then
+    child_state.poll(
+      device,
+      tostring(source or "sync") .. ".state"
+    )
+  end
+end
+
+local function schedule_auto_discovery(driver, device)
+  cancel_timer(device, "auto_discovery_timer")
+
+  if not auto_discovery.enabled(device) then
+    log.info(string.format(
+      "%s auto child discovery disabled",
+      device.label
+    ))
     return
   end
 
-  local note = ""
-  if device.preferences then
-    note = tostring(device.preferences.installationNote or "")
-  end
+  device.transient_store.auto_discovery_timer =
+    device.thread:call_on_schedule(
+      AUTO_DISCOVERY_INTERVAL,
+      function()
+        auto_discovery.sync(
+          driver,
+          device,
+          "scheduled"
+        )
+      end,
+      "xiaomi gateway child discovery"
+    )
 
   log.info(string.format(
-    "%s configured: model=%s market_model=%s ip=%s interval=%ss timeout=%ss failure_threshold=%d diagnostics=%s note=%s",
+    "%s auto child discovery scheduled every %d seconds",
     device.label,
-    gateway.model,
-    gateway.market_model,
-    get_ip(device),
-    tostring(get_interval(device)),
-    tostring(get_timeout(device)),
-    get_failure_threshold(device),
-    diagnostics.enabled() and "enabled" or "standard-only",
-    note
+    AUTO_DISCOVERY_INTERVAL
   ))
 end
 
-local function is_gateway_device(device)
-  return child_manager.is_gateway(device, gateways)
+local function schedule_child_state_poll(device)
+  cancel_timer(device, "child_state_timer")
+
+  if not child_state.enabled(device) then
+    log.info(string.format(
+      "%s Zigbee state polling disabled",
+      device.label
+    ))
+    return
+  end
+
+  if not auto_discovery.enabled(device) then
+    log.warn(string.format(
+      "%s Zigbee state polling requires Auto child discovery to build the current child inventory",
+      device.label
+    ))
+    return
+  end
+
+  local interval = child_state.interval(device)
+
+  device.transient_store.child_state_timer =
+    device.thread:call_on_schedule(
+      interval,
+      function()
+        child_state.poll(device, "scheduled")
+      end,
+      "xiaomi gateway Zigbee state poll"
+    )
+
+  log.info(string.format(
+    "%s Zigbee state polling scheduled every %d seconds",
+    device.label,
+    interval
+  ))
+end
+
+local function start_ble_mqtt(driver, device, source)
+  mqtt_ble.start(driver, device, source or "lifecycle")
+end
+
+local function stop_ble_mqtt(device, source)
+  mqtt_ble.stop(device, source or "removed")
+end
+
+local function log_configuration(device)
+  log.info(string.format(
+    "%s configured: ip=%s health_interval=%ds timeout=%ds failure_threshold=%d role=%s",
+    device.label,
+    get_ip(device),
+    get_interval(device),
+    PROBE_TIMEOUT,
+    FAILURE_THRESHOLD,
+    gateway_runtime.role_summary(device)
+  ))
+end
+
+local function start_services(driver, device, source)
+  run_child_sync(driver, device, source)
+  schedule_health_check(device)
+  schedule_auto_discovery(driver, device)
+  schedule_child_state_poll(device)
+  start_ble_mqtt(driver, device, source)
+  check_gateway(device, source)
 end
 
 local function added_handler(driver, device)
   if not is_gateway_device(device) then
     child_manager.initialize_child(device)
-    log.info(string.format(
-      "%s child added: parent_key=%s model=%s",
-      device.label,
-      tostring(device.parent_assigned_child_key or ""),
-      tostring(device.model or "")
-    ))
     return
   end
 
   log_configuration(device)
   diagnostics.emit_cached(device, get_ip(device))
-  child_manager.sync(driver, device)
-  schedule_health_check(device)
-  check_gateway(device, "added", true)
+  start_services(driver, device, "added")
 end
 
 local function init_handler(driver, device)
@@ -302,9 +299,7 @@ local function init_handler(driver, device)
   end
 
   diagnostics.emit_cached(device, get_ip(device))
-  child_manager.sync(driver, device)
-  schedule_health_check(device)
-  check_gateway(device, "init", true)
+  start_services(driver, device, "init")
 end
 
 local function info_changed_handler(driver, device, event, args)
@@ -314,43 +309,18 @@ local function info_changed_handler(driver, device, event, args)
 
   log_configuration(device)
   diagnostics.emit_cached(device, get_ip(device))
-  child_manager.sync(driver, device)
-  schedule_health_check(device)
-  check_gateway(device, "infoChanged", true)
+  start_services(driver, device, "infoChanged")
 end
 
 local function removed_handler(driver, device)
-  if is_gateway_device(device) then
-    cancel_health_timer(device)
-  end
-end
-
-local function refresh_handler(driver, device, command)
-  if is_gateway_device(device) then
-    child_manager.sync(driver, device)
-    check_gateway(device, "refresh", true)
+  if not is_gateway_device(device) then
     return
   end
 
-  local ok, parent = pcall(function()
-    return device:get_parent_device()
-  end)
-
-  if ok and parent then
-    child_manager.sync(driver, parent)
-    check_gateway(parent, "child.refresh", true)
-  else
-    log.warn(string.format(
-      "%s child refresh ignored: parent device unavailable",
-      device.label
-    ))
-  end
-end
-
-local function health_ping_handler(driver, device, command)
-  if is_gateway_device(device) then
-    check_gateway(device, "healthCheck.ping", true)
-  end
+  cancel_timer(device, "health_timer")
+  cancel_timer(device, "auto_discovery_timer")
+  cancel_timer(device, "child_state_timer")
+  stop_ble_mqtt(device, "removed")
 end
 
 local driver = Driver("xiaomi-gateway-registration", {
@@ -361,15 +331,6 @@ local driver = Driver("xiaomi-gateway-registration", {
     init = init_handler,
     infoChanged = info_changed_handler,
     removed = removed_handler,
-  },
-
-  capability_handlers = {
-    [capabilities.refresh.ID] = {
-      [capabilities.refresh.commands.refresh.NAME] = refresh_handler,
-    },
-    [capabilities.healthCheck.ID] = {
-      [capabilities.healthCheck.commands.ping.NAME] = health_ping_handler,
-    },
   },
 })
 

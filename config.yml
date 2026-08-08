@@ -1,7 +1,8 @@
-name: "Xiaomi Gateway"
-packageKey: "xiaomi-gateway"
-description: "Register Xiaomi gateways as SmartThings LAN devices"
-vendorSupportInformation: "Community experimental driver"
+name: Xiaomi Gateway
+packageKey: xiaomi-gateway
+description: Dynamic Xiaomi gateway driver with automatic BLE parent selection and
+  fixed MQTT lifecycle runtime
+vendorSupportInformation: Community experimental driver
 permissions:
   lan: {}
   discovery: {}

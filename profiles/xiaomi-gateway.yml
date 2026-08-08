@@ -4,24 +4,10 @@ components:
   capabilities:
   - id: locketforest19027.xiaomiGatewayStatus
     version: 1
-  - id: locketforest19027.xiaomiGatewayIp
-    version: 1
-  - id: locketforest19027.xiaomiGatewayLatency
-    version: 1
-  - id: locketforest19027.xiaomiGatewayLastSeen
-    version: 1
-  - id: locketforest19027.xiaomiGatewayFailures
-    version: 1
-  - id: healthCheck
-    version: 1
-  - id: presenceSensor
-    version: 1
-  - id: refresh
-    version: 1
   categories:
   - name: Hub
 preferences:
-- title: Gateway IP address
+- title: IP address
   name: gatewayIp
   description: IPv4 address used for the Xiaomi miIO UDP health check.
   required: false
@@ -31,7 +17,7 @@ preferences:
     maxLength: 64
     stringType: text
     default: ''
-- title: Health check interval (seconds)
+- title: Health check interval
   name: checkInterval
   description: How often the driver checks the gateway over UDP 54321.
   required: false
@@ -40,79 +26,67 @@ preferences:
     minimum: 30
     maximum: 3600
     default: 60
-- title: Probe timeout (seconds)
-  name: probeTimeout
-  description: How long to wait for a miIO hello response.
-  required: false
-  preferenceType: integer
-  definition:
-    minimum: 1
-    maximum: 10
-    default: 3
-- title: Offline after consecutive failures
-  name: failureThreshold
-  description: Number of consecutive failed probes before the device is marked offline.
-  required: false
-  preferenceType: integer
-  definition:
-    minimum: 1
-    maximum: 5
-    default: 3
-- title: Installation note
-  name: installationNote
-  description: Optional room, location, or purpose.
-  required: false
-  preferenceType: string
-  definition:
-    minLength: 0
-    maxLength: 128
-    stringType: text
-    default: ''
-- title: Child devices
-  name: childDevices
-  description: 'One child per line: type|key|label|model. Types: temp-humidity, contact,
-    motion, water, generic.'
-  required: false
-  preferenceType: string
-  definition:
-    minLength: 0
-    maxLength: 255
-    stringType: paragraph
-    default: ''
-- title: Child devices 2
-  name: childDevices2
-  description: 'Continuation of Child devices list. Same format: type|key|label|model.'
-  required: false
-  preferenceType: string
-  definition:
-    minLength: 0
-    maxLength: 255
-    stringType: paragraph
-    default: ''
-- title: Child devices 3
-  name: childDevices3
-  description: 'Continuation of Child devices list. Same format: type|key|label|model.'
-  required: false
-  preferenceType: string
-  definition:
-    minLength: 0
-    maxLength: 255
-    stringType: paragraph
-    default: ''
-- title: Child devices 4
-  name: childDevices4
-  description: 'Continuation of Child devices list. Same format: type|key|label|model.'
-  required: false
-  preferenceType: string
-  definition:
-    minLength: 0
-    maxLength: 255
-    stringType: paragraph
-    default: ''
-- title: Child online state follows gateway
-  name: childFollowsGateway
-  description: When enabled, children are marked online/offline with the parent gateway.
+- title: Auto child discovery
+  name: autoChildDiscovery
+  description: Discover non-BLE Xiaomi child devices over authenticated miIO. Requires
+    TOKEN. Known BLE sensor registration is independent.
   required: false
   preferenceType: boolean
   definition:
-    default: true
+    default: false
+- title: TOKEN
+  name: gatewayToken
+  description: Optional 32-hex-character miIO TOKEN for this gateway. Required only
+    for authenticated child discovery/Zigbee polling.
+  required: false
+  preferenceType: string
+  definition:
+    minLength: 0
+    maxLength: 32
+    stringType: text
+    default: ''
+- title: Zigbee state polling
+  name: childStatePolling
+  description: Poll supported auto-discovered Zigbee child values. Requires Auto child
+    discovery and TOKEN.
+  required: false
+  preferenceType: boolean
+  definition:
+    default: false
+- title: Zigbee poll interval
+  name: childPollInterval
+  description: Polling interval for supported Zigbee child values. Minimum 30 seconds.
+  required: false
+  preferenceType: integer
+  definition:
+    minimum: 30
+    maximum: 3600
+    default: 60
+- title: BLE via MQTT
+  name: bleMqttEnabled
+  description: Receive BLE advertisements through this gateway's MQTT broker. Enable
+    on the gateway running openmiio/Mosquitto.
+  required: false
+  preferenceType: boolean
+  definition:
+    default: false
+- title: BLE MQTT broker IP
+  name: bleMqttBrokerIp
+  description: Optional MQTT broker IPv4 address. Leave blank to use this gateway's
+    IP address.
+  required: false
+  preferenceType: string
+  definition:
+    minLength: 0
+    maxLength: 64
+    stringType: text
+    default: ''
+- title: BLE MQTT port
+  name: bleMqttPort
+  description: MQTT TCP port exposed by the local openmiio/Mosquitto broker.
+  required: false
+  preferenceType: integer
+  definition:
+    minimum: 1
+    maximum: 65535
+    default: 1883

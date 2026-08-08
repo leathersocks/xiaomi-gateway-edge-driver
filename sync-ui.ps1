@@ -5,11 +5,7 @@ $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 
 $Caps = [ordered]@{
-  "locketforest19027.xiaomiGatewayStatus"   = "xiaomiGatewayStatus"
-  "locketforest19027.xiaomiGatewayIp"       = "xiaomiGatewayIp"
-  "locketforest19027.xiaomiGatewayLatency"  = "xiaomiGatewayLatency"
-  "locketforest19027.xiaomiGatewayLastSeen" = "xiaomiGatewayLastSeen"
-  "locketforest19027.xiaomiGatewayFailures" = "xiaomiGatewayFailures"
+  "locketforest19027.xiaomiGatewayStatus" = "xiaomiGatewayStatus"
 }
 
 function Write-Utf8NoBom([string]$Path, [string]$Content) {

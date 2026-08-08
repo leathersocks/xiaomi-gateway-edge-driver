@@ -1,178 +1,50 @@
-# Xiaomi Gateway Edge Driver v1.3.0-child-r3
+# Xiaomi Gateway Edge Driver v1.8.2-runtime-fix
 
-Based on the verified `v1.2.6f-final` distribution.
+This release fixes the runtime error found after the dynamic-gateway migration.
 
-This version adds SmartThings `EDGE_CHILD` device registration under each
-Xiaomi gateway while preserving the existing gateway health/diagnostics logic.
+## Fixes
 
-## What this version adds
+- Removed the stale `gateway_for_device()` call from `mqtt_ble.start()`.
+- MQTT applicability now means only "this device is a Xiaomi Gateway parent".
+- `BLE via MQTT` is evaluated separately as the enable/disable preference.
+- Turning `BLE via MQTT` Off now stops/invalidate an existing listener first.
+- Dynamic gateway discovery DNI generation no longer needs a bitwise operator.
+- Automatic BLE child registration/parent selection from v1.8.1 is retained.
 
-Each gateway has four `Child devices` preference fields because SmartThings
-limits a single string preference to 255 characters.
-
-Use them as one continuous manifest:
-
-```text
-Child devices
-Child devices 2
-Child devices 3
-Child devices 4
-```
-
-Each field accepts the same format, one child per line:
+## Gateway settings
 
 ```text
-type|key|label|model
+IP address
+Health check interval
+Auto child discovery
+TOKEN
+Zigbee state polling
+Zigbee poll interval
+BLE via MQTT
+BLE MQTT broker IP
+BLE MQTT port
 ```
 
-Supported child types:
+## Automatic BLE
 
 ```text
-temp-humidity
-contact
-motion
-water
-generic
+MQTT BLE event
+ -> pdid 5860 + MAC
+ -> search all Gateway parents for ble-<MAC>
+ -> existing child: preserve parent/name
+ -> new child: existing BLE parent, otherwise MQTT source
+ -> create automatically
 ```
 
-Example:
+## MQTT
 
 ```text
-temp-humidity|ble-a4c138123456|Living Room Sensor|LYWSD02MMC
-contact|zigbee-00158d0001234567|Front Door|lumi.sensor_magnet.aq2
-motion|zigbee-00158d0007654321|Hall Motion|lumi.sensor_motion.aq2
+Topic             #
+Keepalive         30s
+PINGREQ           15s
+PINGRESP timeout  10s
+Receive tick       5s
+Reconnect          3s
 ```
 
-The four fields are concatenated internally before parsing, providing roughly
-1 KB of manifest capacity while keeping every Device Profile preference within
-SmartThings' 255-character limit.
-
-## SmartThings child behavior
-
-The driver uses `EDGE_CHILD` devices with:
-
-```text
-parent_device_id
-parent_assigned_child_key
-```
-
-The child key must be unique under each parent gateway.
-
-Saving the gateway preferences, refreshing the gateway, or restarting the
-driver triggers an idempotent child sync.
-
-Existing children are reused by their parent-assigned key, so repeated syncs
-do not create duplicates.
-
-## Child profiles
-
-```text
-xiaomi-child-temp-hum
-  temperatureMeasurement
-  relativeHumidityMeasurement
-  battery
-  presenceSensor
-  refresh
-
-xiaomi-child-contact
-  contactSensor
-  battery
-  presenceSensor
-  refresh
-
-xiaomi-child-motion
-  motionSensor
-  battery
-  presenceSensor
-  refresh
-
-xiaomi-child-water
-  waterSensor
-  battery
-  presenceSensor
-  refresh
-
-xiaomi-child-generic
-  presenceSensor
-  refresh
-```
-
-## Online / offline behavior
-
-By default, child availability follows the parent gateway.
-
-When the gateway is reachable:
-
-```text
-child online
-presence = present
-```
-
-When the gateway reaches its configured offline failure threshold:
-
-```text
-child offline
-presence = not present
-```
-
-This behavior can be disabled with:
-
-```text
-Child online state follows gateway
-```
-
-## Important current limitation
-
-This version adds the **SmartThings child registration framework**, but it
-does not yet read live temperature/humidity/contact/motion/etc. values from
-the Xiaomi gateway.
-
-The existing driver intentionally does not enable Telnet or MQTT and does not
-store a Xiaomi token. On stock Xiaomi Multimode Gateway firmware, commonly
-used local integrations obtain child-device data using additional gateway
-credentials and a local gateway service path.
-
-For this reason the child profiles are created now, but measurement/control
-transport remains separate from registration.
-
-## Install
-
-No setup script is required:
-
-```powershell
-cd C:\SmartThings\xiaomi-gateway-edge-driver-v1.3.0-child-r3
-smartthings edge:drivers:package . --install
-```
-
-The package keeps:
-
-```text
-packageKey: xiaomi-gateway
-```
-
-so it updates the existing Xiaomi Gateway driver.
-
-## Removing a child
-
-The driver intentionally does not auto-delete children when a manifest line is
-removed.
-
-To permanently remove a child:
-
-1. Remove the child line from the parent gateway's `Child devices` preference.
-2. Delete the child device from SmartThings.
-
-If the manifest line remains, a deleted child will be recreated at the next sync.
-
-## Existing gateway functions retained
-
-- miIO UDP 54321 health check
-- Status / IP / Latency / Last Seen / Failures
-- KST Last Seen
-- scheduled and manual refresh
-- presenceSensor / healthCheck
-- 3-failure default offline hysteresis
-- no MQTT
-- no Telnet
-- no BLE scanning by the SmartThings Hub
-- no Xiaomi token stored by this driver
+`packageKey` remains `xiaomi-gateway`.
