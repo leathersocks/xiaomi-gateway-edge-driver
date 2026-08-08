@@ -17,6 +17,8 @@ T700i의 MiBeacon 칫솔 이벤트(EID `0x3003`)는 `type=0`을 양치 시작으
 
 또한 종료 패킷 자체가 유실되거나 해석할 수 없는 경우를 대비해 T700i 전용 30초 activity watchdog을 최종 안전망으로 유지합니다.
 
+v1.10.3부터는 강제 정지 순간의 실제 MiBeacon 패킷 구조를 확인할 수 있도록 T700i 전용 raw 진단 로그를 추가했습니다. 이 로그는 자식 장치 조회 및 `frmCnt` 중복 억제보다 먼저 기록되므로, 동일 패킷이 여러 Gateway에서 수신되거나 상태 이벤트가 생성되지 않는 경우에도 원본 `EID`와 `edata`를 확인할 수 있습니다.
+
 ## 상태 머신
 
 ```text
@@ -54,6 +56,44 @@ IDLE + watchdog fallback
 - 정상 완료에서는 일반적으로 `type=1`과 점수가 함께 들어오며, 강제/조기 정지에서는 다른 non-zero type 또는 점수가 없는 종료 패킷이 들어올 수 있습니다.
 - 종료 패킷이 아예 수신되지 않으면 마지막 T700i `type=0` 활동 광고 이후 30초 뒤 watchdog이 `motionSensor=inactive`로 복구합니다.
 - watchdog fallback은 종료 시각·점수 같은 완료 세션 메타데이터를 임의로 만들지 않습니다. 이후 유효한 종료 기록이 들어오면 기존 메타데이터 갱신 규칙을 따릅니다.
+
+## Raw BLE 진단 로그
+
+v1.10.3 이상에서는 `pdid=6032` 패킷을 받을 때 다음 형식의 로그가 먼저 기록됩니다.
+
+```text
+BLE MQTT T700i RAW: topic=miio/report did=... mac=... pdid=6032 frmCnt=... gwts=... events=[#1 eid=... eid_hex=... edata=... bytes=... type=... event_ts=...]
+```
+
+확인할 주요 항목은 다음과 같습니다.
+
+- `source label`: 로그 줄 맨 앞의 Gateway 이름. 예: `미홈 1st`, `미홈 2rd`
+- `frmCnt`: BLE advertisement sequence 값
+- `gwts`: Gateway가 기록한 수신 timestamp
+- `eid`: Xiaomi MiBeacon 이벤트 ID
+- `eid_hex`: 이벤트 ID의 16진 표기
+- `edata`: Gateway가 전달한 원본 payload
+- `bytes`: `edata`를 디코딩한 byte 수
+- `type`: `eid=12291 / 0x3003`일 때 첫 번째 byte. `0`은 시작, non-zero는 종료 후보
+- `event_ts`: `0x3003` payload의 내장 timestamp
+
+강제 정지 테스트에서는 특히 **정지 버튼을 누른 직후의 `T700i RAW` 로그**를 확인합니다.
+
+예를 들어 다음과 같이 나오면 종료 이벤트로 즉시 처리할 수 있습니다.
+
+```text
+BLE MQTT T700i RAW: ... eid=12291 eid_hex=0x3003 edata=... type=2 event_ts=...
+```
+
+반대로 강제 정지 순간에 다음과 같이 다른 EID가 들어온다면 해당 EID가 T700i의 별도 정지 이벤트인지 추가 분석해야 합니다.
+
+```text
+BLE MQTT T700i RAW: ... eid=<12291 이외 값> eid_hex=... edata=... type=- event_ts=-
+```
+
+강제 정지 후 `T700i RAW` 로그 자체가 없다면 T700i가 종료 advertisement를 송신하지 않았거나 Gateway/openmiio 경로에서 해당 패킷을 전달하지 않은 것으로 볼 수 있으며, 이 경우 30초 watchdog fallback이 필요합니다.
+
+두 Gateway가 동일 MQTT broker를 동시에 구독하는 구성에서는 같은 `frmCnt`가 Gateway별로 각각 raw 로그에 나타날 수 있습니다. raw 로그는 의도적으로 중복 억제 전에 출력되며, 실제 SmartThings 상태 처리는 기존 `frmCnt` 중복 억제 규칙을 계속 적용합니다.
 
 ## 런타임 필드
 
