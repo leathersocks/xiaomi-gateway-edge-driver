@@ -463,25 +463,25 @@ local function process_toothbrush_event(
   end
 
   local event_type = bytes[1]
-  local event_timestamp = little_u32_from_bytes(bytes, 2)
+  local raw_event_timestamp = little_u32_from_bytes(bytes, 2)
   local score = #bytes >= 6 and bytes[6] or nil
 
   -- Xiaomi MiBeacon toothbrush events use 0 for brushing start and a
-  -- non-zero event type for brushing finish. Normal T700i sessions have
-  -- been observed with type=1, while an early/manual stop may use another
-  -- non-zero finish code. Treat every non-zero 0x3003 type as an end event
-  -- so a forced stop is reflected immediately instead of waiting for the
-  -- watchdog fallback.
+  -- non-zero event type for brushing finish. A forced/early stop can send
+  -- type=1 with the PREVIOUS completed-brushing timestamp instead of the
+  -- current stop timestamp. Keep that raw timestamp for diagnostics, but
+  -- while a current session is active infer the actual stop from receipt
+  -- time (gwts) so SmartThings can reflect the stop immediately.
 
   local reference_timestamp =
     tonumber(gateway_timestamp) or os.time()
 
-  local delta = event_timestamp and
-    math.abs(reference_timestamp - event_timestamp) or nil
+  local raw_delta = raw_event_timestamp and
+    math.abs(reference_timestamp - raw_event_timestamp) or nil
 
-  local is_live =
-    delta ~= nil and
-    delta <= TOOTHBRUSH_LIVE_WINDOW_SECONDS
+  local embedded_live =
+    raw_delta ~= nil and
+    raw_delta <= TOOTHBRUSH_LIVE_WINDOW_SECONDS
 
   local emitted = 0
 
@@ -503,9 +503,40 @@ local function process_toothbrush_event(
   local session_start =
     tonumber(start_raw) or 0
 
+  local forced_stop_inferred =
+    event_type ~= 0 and
+    session_active and
+    session_start > 0 and
+    not embedded_live and
+    reference_timestamp >= session_start and
+    (reference_timestamp - session_start) <= TOOTHBRUSH_MAX_SESSION_SECONDS
+
+  local event_timestamp =
+    forced_stop_inferred and reference_timestamp or raw_event_timestamp
+
+  local delta = event_timestamp and
+    math.abs(reference_timestamp - event_timestamp) or nil
+
+  local is_live = embedded_live or forced_stop_inferred
+
   local duration = nil
   local session_started = false
   local session_completed = false
+
+  if forced_stop_inferred then
+    log.info(string.format(
+      "%s BLE MQTT T700i forced stop inferred: label=%s raw_event_ts=%s raw_event_kst=%s gwts=%s gw_kst=%s start_ts=%s start_kst=%s inferred_duration=%ss",
+      tostring(source_label or "Xiaomi Gateway"),
+      tostring(child.label or child.id),
+      tostring(raw_event_timestamp or "-"),
+      format_kst(raw_event_timestamp) or "-",
+      tostring(reference_timestamp or "-"),
+      format_kst(reference_timestamp) or "-",
+      tostring(session_start or "-"),
+      format_kst(session_start) or "-",
+      tostring(reference_timestamp - session_start)
+    ))
+  end
 
   if event_type == 0 then
     if is_live then
@@ -549,8 +580,9 @@ local function process_toothbrush_event(
       )
     end
   else
-    -- Only a LIVE end event changes current brushing state or calculates
-    -- duration. Historical replay packets never terminate a live session.
+    -- A normally live end event uses the embedded timestamp. If the T700i
+    -- sends a stale previous-session timestamp while a current session is
+    -- active, forced_stop_inferred substitutes gwts as the effective end.
     if is_live then
       invalidate_toothbrush_watchdog(child)
 
@@ -592,8 +624,10 @@ local function process_toothbrush_event(
       session_completed = true
     end
 
-    -- A historical end record may still be useful metadata if it is newer
-    -- than the last stored completed brushing record.
+    -- A historical end record may still update metadata when newer. For an
+    -- inferred forced stop, event_timestamp is gwts so the current stop time
+    -- becomes the latest completed brushing timestamp without inventing a
+    -- score that was not present in the packet.
     if event_timestamp and event_timestamp > previous_last then
       child:set_field(
         TOOTHBRUSH_LAST_TS_FIELD,
@@ -613,10 +647,13 @@ local function process_toothbrush_event(
 
   return emitted, {
     event_type = event_type,
+    raw_timestamp = raw_event_timestamp,
     timestamp = event_timestamp,
     score = score,
+    raw_delta = raw_delta,
     delta = delta,
     live = is_live,
+    forced_stop_inferred = forced_stop_inferred,
     session_start = session_start,
     session_started = session_started,
     session_completed = session_completed,
@@ -760,7 +797,7 @@ local function process_ble_params(driver, source, params, topic)
         tonumber(last_timestamp_raw)
 
       log.info(string.format(
-        "%s BLE MQTT toothbrush state OK: topic=%s label=%s parent=%s pdid=%s frmCnt=%s type=%s event_ts=%s event_kst=%s live=%s delta=%s start_ts=%s duration=%ss duration_text=%s score=%s last_score=%s last_brushing=%s battery=%s%%",
+        "%s BLE MQTT toothbrush state OK: topic=%s label=%s parent=%s pdid=%s frmCnt=%s type=%s raw_event_ts=%s raw_event_kst=%s event_ts=%s event_kst=%s live=%s raw_delta=%s delta=%s forced_stop=%s start_ts=%s duration=%ss duration_text=%s score=%s last_score=%s last_brushing=%s battery=%s%%",
         source.label,
         tostring(topic or ""),
         child.label,
@@ -768,10 +805,14 @@ local function process_ble_params(driver, source, params, topic)
         tostring(pdid or ""),
         tostring(sequence or ""),
         toothbrush_result and tostring(toothbrush_result.event_type) or "-",
+        toothbrush_result and tostring(toothbrush_result.raw_timestamp) or "-",
+        toothbrush_result and format_kst(toothbrush_result.raw_timestamp) or "-",
         toothbrush_result and tostring(toothbrush_result.timestamp) or "-",
         toothbrush_result and format_kst(toothbrush_result.timestamp) or "-",
         toothbrush_result and tostring(toothbrush_result.live) or "-",
+        toothbrush_result and tostring(toothbrush_result.raw_delta) or "-",
         toothbrush_result and tostring(toothbrush_result.delta) or "-",
+        toothbrush_result and tostring(toothbrush_result.forced_stop_inferred) or "-",
         toothbrush_result and tostring(toothbrush_result.session_start or "-") or "-",
         toothbrush_result and tostring(toothbrush_result.duration or "-") or "-",
         toothbrush_result and format_duration(toothbrush_result.duration) or "-",
@@ -785,14 +826,16 @@ local function process_ble_params(driver, source, params, topic)
          toothbrush_result.session_completed and
          toothbrush_result.live then
         log.info(string.format(
-          "%s BLE MQTT toothbrush session complete: label=%s start=%s end=%s duration=%ss duration_text=%s score=%s",
+          "%s BLE MQTT toothbrush session complete: label=%s start=%s end=%s duration=%ss duration_text=%s score=%s forced_stop=%s raw_event_ts=%s",
           source.label,
           child.label,
           format_kst(toothbrush_result.session_start) or "-",
           format_kst(toothbrush_result.timestamp) or "-",
           tostring(toothbrush_result.duration or "-"),
           format_duration(toothbrush_result.duration) or "-",
-          tostring(toothbrush_result.score or "-")
+          tostring(toothbrush_result.score or "-"),
+          tostring(toothbrush_result.forced_stop_inferred or false),
+          tostring(toothbrush_result.raw_timestamp or "-")
         ))
       end
     end
