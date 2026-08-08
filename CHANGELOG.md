@@ -11,6 +11,16 @@
 
 ---
 
+## v1.10.2-t700i-forced-stop-fix — 2026-08-09
+
+- T700i가 동작 중 사용자가 강제/조기 정지했을 때 SmartThings `motionSensor`가 `active` 상태에 남을 수 있는 문제를 수정했습니다.
+- 실제 재현 로그에서 `type=0` 시작 이후 강제 정지 시 BLE MQTT 패킷은 수신되었지만 기존 디코더가 상태 이벤트를 생성하지 못하는 현상을 확인했습니다.
+- T700i MiBeacon EID `12291 / 0x3003`의 이벤트 타입 처리 규칙을 `type=0 = 시작`, `type!=0 = 종료`로 변경했습니다.
+- 정상 종료에서 관찰된 `type=1`뿐 아니라 다른 non-zero 종료 코드도 즉시 `motionSensor=inactive`로 반영합니다.
+- 정상 종료 패킷 자체가 유실되거나 해석되지 않는 경우를 대비해 30초 T700i activity watchdog을 최종 fallback으로 유지합니다.
+- 기존 60초 live/history 필터, 세션 시작 시각 보존, 양치 시간 계산, 점수/마지막 양치 기록 로직은 유지합니다.
+- 이 버전은 강제 정지 이벤트 규칙 수정본이며 실제 Hub 재설치 후 강제 정지 런타임 재검증이 필요합니다.
+
 ## v1.10.1-final-verified — 2026-08-08
 
 - 최종 배포 패키지 전체 감사 및 정리를 수행했습니다.
@@ -254,7 +264,6 @@
 - 길이가 너무 길었던 preference 이름을 `childFollowsGateway`로 축약했습니다.
 - `src/child_manager.lua`를 새 preference 이름에 맞게 수정했습니다.
 - 모든 YAML `name` 필드가 SmartThings 허용 길이에 맞는지 다시 검증했습니다.
-- r1/r2에서 수정한 preference maxLength와 child profile 이름 제한을 그대로 유지했습니다.
 - EDGE_CHILD 등록 로직과 miIO 네트워크 동작에는 변경이 없습니다.
 
 ## v1.3.0-child-r2 — 2026-08-07
@@ -340,7 +349,7 @@
 
 - SmartThings Custom Capability 생성 실패를 더 명확히 판정하도록 setup 스크립트를 보강했습니다.
 - CLI stdout/stderr와 종료 코드를 분리해 처리하도록 했습니다.
-- 5개 세로 capability를 순차적으로 확인하고, 하나라도 생성할 수 없으면 Diagnostics V2 fallback으로 전환하도록 했습니다.
+- 5개 세로 capability를 순차적으로 확인하고, 하나라도 생성할 수 없으면 Diagnostics V2 fallback으로 전환하도록 개선했습니다.
 - 403 등 플랫폼 권한/생성 오류가 있어도 설치 경로를 결정적으로 선택하도록 개선했습니다.
 
 ## v1.2.6a — 2026-08-07
@@ -473,5 +482,5 @@ v1.8.x   동적 Gateway / 자동 BLE parent
    ↓
 v1.9.x   Xiaomi Toothbrush T700i 지원
    ↓
-v1.10.x  양치 세션 추적 및 최종 배포 검증
+v1.10.x  양치 세션 추적, 강제 정지 처리 및 배포 검증
 ```
