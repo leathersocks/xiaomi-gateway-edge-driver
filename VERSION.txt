@@ -1,2 +1,2 @@
-v1.10.1-final-verified
-2026-08-08
+v1.10.2-t700i-forced-stop-fix
+2026-08-09
