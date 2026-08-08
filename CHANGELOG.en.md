@@ -11,6 +11,57 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.10.7-final-verified — 2026-08-09
+
+- Finalized and verified Korean display for the Gateway status Custom Capability.
+- Added a Gateway profile refresh request on startup using `device:try_update_metadata({ profile = "xiaomi-gateway" })` so existing Gateway devices stop referencing an older Device Presentation/profile.
+- Uses a per-version persistent marker so the profile refresh runs only once per Gateway device for this release.
+- Verified in the actual SmartThings app that `online / degraded / offline` are displayed as the Korean equivalents of Connected / Unstable / Disconnected.
+- Verified the combined `ko` and `ko-KR` translations, Capability Presentation, Embedded Device Configuration, and existing-device profile-refresh path.
+- Preserves the v1.10.4+ T700i stale-timestamp forced-stop fix, immediate `motionSensor=inactive` transition, and 30-second watchdog fallback.
+- Marked this release as the final verified build as of 2026-08-09.
+
+## v1.10.6-gateway-presentation-refresh — 2026-08-09
+
+- Intermediate fix for a case where Gateway status translations were successfully uploaded to SmartThings cloud but existing Device Presentations still displayed English values.
+- Added a `ko-KR` locale translation file mapping `online / degraded / offline` to Korean labels.
+- Added Embedded Device Configuration (`config.values.enabledValues`) to the Gateway profile Custom Capability so Edge Driver packaging generates a fresh Device Presentation.
+- Translation and Capability Presentation uploads succeeded, but existing devices could still keep an older VID/profile, so v1.10.7 added explicit profile refresh for existing devices.
+
+## v1.10.5-gateway-status-i18n-fix — 2026-08-09
+
+- First-stage fix for Korean values in `translations/xiaomiGatewayStatus-ko.json` not appearing in the SmartThings app.
+- Added `alternatives` to the Capability Presentation Dashboard and Detail View and changed displayed state labels to reference `{{i18n.attributes.gatewayStatus.i18n.value.<state>.label}}`.
+- Changed `install.ps1` to run `sync-ui.ps1` by default so the Capability definition, EN/KO translations, and Presentation are synchronized to SmartThings cloud before packaging/installing the Edge Driver.
+- Updated `sync-ui.ps1` guidance and made UI metadata synchronization an explicit part of the normal install path.
+- Cloud translation/Presentation updates succeeded, but the app still displayed English because of the existing Device Presentation/VID, requiring the follow-up releases.
+
+## v1.10.4-t700i-stale-stop-fix — 2026-08-09
+
+- Added handling for the real T700i forced-stop pattern where `frmCnt` and Gateway timestamp (`gwts`) are current but the embedded timestamp in EID `0x3003` repeats the timestamp of a previous completed brushing session.
+- Fixed the case where the 60-second live/history filter treated that stale embedded timestamp as history and ignored the forced-stop `type=1` event.
+- When a non-zero end event arrives during an active session and only the embedded timestamp is stale, the driver infers `gwts` as the effective end timestamp.
+- An inferred forced stop immediately emits `motionSensor=inactive` and invalidates the watchdog.
+- Preserves the raw embedded timestamp for diagnostics while using `gwts` for session end time, last brushing time, and brushing-duration calculation.
+- Verified on a real Hub: after roughly 10 seconds of brushing, a forced stop produced `forced_stop=true`, `duration=10s`, immediate `inactive`, and no later watchdog timeout.
+
+## v1.10.3-t700i-raw-diagnostics — 2026-08-09
+
+- Added raw T700i BLE diagnostic logging to identify the actual packet structure behind the forced-stop issue.
+- For `pdid=6032`, logs topic, DID, MAC, pdid, frmCnt, gwts, and each event's EID/edata/type/event timestamp before child resolution and `frmCnt` duplicate suppression.
+- Diagnostics confirmed that forced-stop packets arrive with fresh `frmCnt`/`gwts` and `type=1`, while the embedded event timestamp points to a previous completed brushing session.
+- This finding led directly to the stale-timestamp inference logic added in v1.10.4.
+
+## v1.10.2-t700i-forced-stop-fix — 2026-08-09
+
+- Fixed a case where SmartThings `motionSensor` could remain `active` after the user force-stopped or ended T700i brushing early.
+- Reproduction logs showed that a BLE MQTT packet still arrived after a `type=0` start, but the previous decoder did not produce the expected end-state transition.
+- Changed the T700i MiBeacon EID `12291 / 0x3003` event rule to `type=0 = start`, `type!=0 = end`.
+- Handles not only the normal observed `type=1`, but any non-zero end code as an immediate `motionSensor=inactive` transition.
+- Keeps the 30-second T700i activity watchdog as the final fallback if an end packet is missing or unusable.
+- Preserves the existing 60-second live/history filter, original session start timestamp, duration calculation, score, and last-brushing state.
+- This release changed the forced-stop event rule but still required runtime investigation of the remaining stale-timestamp case addressed in v1.10.4.
+
 ## v1.10.1-final-verified — 2026-08-08
 
 - Performed a full audit and cleanup of the final deployment package.
@@ -473,5 +524,5 @@ v1.8.x   Dynamic Gateway / automatic BLE parent
    ↓
 v1.9.x   Xiaomi Toothbrush T700i support
    ↓
-v1.10.x  Brushing-session tracking and final deployment verification
+v1.10.x  T700i session/forced-stop handling + Gateway status localization and final verification
 ```
