@@ -12,6 +12,11 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def repository_bytes(path: Path) -> bytes:
+    """Return the canonical bytes Git stores for normalized text files."""
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 class RepositoryTests(unittest.TestCase):
     def test_json_and_yaml_files_parse(self):
         for path in ROOT.rglob("*.json"):
@@ -57,7 +62,7 @@ class RepositoryTests(unittest.TestCase):
             expected, relative = line.split(maxsplit=1)
             path = ROOT / relative
             self.assertTrue(path.is_file(), f"checksum path missing: {relative}")
-            actual = hashlib.sha256(path.read_bytes()).hexdigest()
+            actual = hashlib.sha256(repository_bytes(path)).hexdigest()
             self.assertEqual(actual, expected, relative)
 
 
