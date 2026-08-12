@@ -2,6 +2,7 @@ local capabilities = require "st.capabilities"
 local log = require "log"
 
 local gateway_runtime = require "gateway_runtime"
+local product_registry = require "product_registry"
 
 local child_manager = {}
 
@@ -21,13 +22,11 @@ local PROFILE_BY_TYPE = {
   ["leak"] = "xiaomi-child-water",
 }
 
-local BLE_TEMP_HUM_PROFILE = "xiaomi-child-temp-hum-v174"
-local BLE_TEMP_HUM_MODEL = "miaomiaoce.sensor_ht.o2"
-local BLE_TEMP_HUM_PDID = 5860
+local BLE_TEMP_HUM_PDID = product_registry.PDID.TEMP_HUMIDITY
+local BLE_TOOTHBRUSH_PDID = product_registry.PDID.TOOTHBRUSH_T700I
 
-local BLE_TOOTHBRUSH_PROFILE = "xiaomi-child-toothbrush"
-local BLE_TOOTHBRUSH_MODEL = "k0918.toothbrush.t700i"
-local BLE_TOOTHBRUSH_PDID = 6032
+local BLE_TEMP_HUM_PRODUCT = product_registry.ble_product(BLE_TEMP_HUM_PDID)
+local BLE_TOOTHBRUSH_PRODUCT = product_registry.ble_product(BLE_TOOTHBRUSH_PDID)
 
 local PENDING_BLE_CREATES = {}
 
@@ -64,16 +63,38 @@ local function emit_presence(child, value)
   end
 end
 
-function child_manager.set_children_reachable(parent, reachable)
+local function set_selected_children_reachable(parent, reachable, selector)
   for _, child in ipairs(parent:get_child_list() or {}) do
-    if reachable then
-      child:online()
-      emit_presence(child, "present")
-    else
-      emit_presence(child, "not present")
-      child:offline()
+    if selector(child) then
+      if reachable then
+        child:online()
+        emit_presence(child, "present")
+      else
+        emit_presence(child, "not present")
+        child:offline()
+      end
     end
   end
+end
+
+function child_manager.set_ble_children_reachable(parent, reachable)
+  set_selected_children_reachable(
+    parent,
+    reachable,
+    function(child)
+      return product_registry.is_ble_model(child.model)
+    end
+  )
+end
+
+function child_manager.set_miio_children_reachable(parent, reachable)
+  set_selected_children_reachable(
+    parent,
+    reachable,
+    function(child)
+      return not product_registry.is_ble_model(child.model)
+    end
+  )
 end
 
 function child_manager.initialize_child(child)
@@ -83,7 +104,7 @@ function child_manager.initialize_child(child)
   -- Toothbrush restart/session recovery is intentionally model-scoped.
   -- Generic Xiaomi motion children also expose motionSensor, but they must
   -- not be reset to inactive by toothbrush-specific state restoration.
-  if tostring(child.model or "") == BLE_TOOTHBRUSH_MODEL and
+  if tostring(child.model or "") == BLE_TOOTHBRUSH_PRODUCT.model and
      child:supports_capability(capabilities.motionSensor) then
     local active_raw =
       child:get_field(TOOTHBRUSH_ACTIVE_FIELD)
@@ -251,7 +272,7 @@ local function is_supported_ble_child(child)
   end
 
   local model = tostring(child.model or "")
-  if model == BLE_TEMP_HUM_MODEL or model == BLE_TOOTHBRUSH_MODEL then
+  if product_registry.is_ble_model(model) then
     return true
   end
 
@@ -435,9 +456,9 @@ function child_manager.ensure_ble_temp_humidity_child(driver, source_gateway, de
     source_gateway,
     dev,
     BLE_TEMP_HUM_PDID,
-    BLE_TEMP_HUM_PROFILE,
-    BLE_TEMP_HUM_MODEL,
-    "BLE 온습도",
+    BLE_TEMP_HUM_PRODUCT.profile,
+    BLE_TEMP_HUM_PRODUCT.model,
+    BLE_TEMP_HUM_PRODUCT.label_prefix,
     "temp/humidity"
   )
 end
@@ -448,9 +469,9 @@ function child_manager.ensure_ble_toothbrush_child(driver, source_gateway, dev)
     source_gateway,
     dev,
     BLE_TOOTHBRUSH_PDID,
-    BLE_TOOTHBRUSH_PROFILE,
-    BLE_TOOTHBRUSH_MODEL,
-    "BLE 칫솔",
+    BLE_TOOTHBRUSH_PRODUCT.profile,
+    BLE_TOOTHBRUSH_PRODUCT.model,
+    BLE_TOOTHBRUSH_PRODUCT.label_prefix,
     "toothbrush"
   )
 end

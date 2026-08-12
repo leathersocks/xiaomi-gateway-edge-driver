@@ -219,7 +219,7 @@ function auto.sync(driver, parent, source)
   parent:set_field(
     INVENTORY_FIELD,
     definitions,
-    { persist = false }
+    { persist = true }
   )
 
   local sync_result = child_manager.sync_definitions(

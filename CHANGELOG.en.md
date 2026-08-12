@@ -11,6 +11,28 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.11.0-runtime-hardening — 2026-08-12
+
+- Changed Gateway reachability from a miIO-only decision to aggregated miIO
+  and MQTT transport health. A miIO probe failure no longer takes healthy MQTT
+  BLE children offline, and BLE/miIO child reachability is handled separately.
+- Replaced wildcard MQTT topic `#` with a single multi-topic subscription for
+  `miio/report` and `central/report`. SUBACK result codes and packet identifiers
+  are validated, and inbound packets are capped at 256 KiB.
+- Added a shared frame-counter policy that distinguishes 8-bit `frmCnt`
+  duplicates, out-of-order frames, wrap-around, and device resets.
+- Centralized BLE product IDs, models, profiles, and EID mappings in
+  `product_registry.lua`.
+- Added a lifecycle guard so `added` followed by `init` does not start services
+  twice, and close the dedicated MQTT Thread when BLE MQTT is disabled.
+- Persisted the Zigbee discovery inventory so state polling survives a driver
+  restart.
+- Consolidated Gateway runtime installation under
+  `mgl03-homekit-bridge --mode openmiio` and removed the duplicate legacy Telnet
+  installer and diagnostics from this repository.
+- Added Korean/English runtime guides, repository validation tests/CI, and
+  regenerated the distribution checksums from current files.
+
 ## v1.10.8-final-verified — 2026-08-09
 
 - Fixed a concurrency issue where the long-running BLE MQTT listener occupied the Gateway `device.thread`, preventing the MQTT-receiver Gateway's periodic miIO Health Check from running.

@@ -18,6 +18,7 @@ The current version uses local Xiaomi miIO communication and MQTT and is designe
 - miIO TOKEN-based Xiaomi child-device discovery
 - State polling for supported Zigbee temperature/humidity devices
 - BLE over MQTT reception
+- Independent miIO/MQTT health so one transport failure does not take unrelated children offline
 - Multiple Xiaomi Gateways can be registered
 
 #### Gateways verified in real use
@@ -153,12 +154,15 @@ openmiio is not required for every user. It is needed **only when using BLE over
 
 In short, openmiio is not required if you only need Gateway status or Zigbee devices. **When using a BLE temperature/humidity sensor or T700i, first check whether MQTT BLE events are already available. Install openmiio only if they are not.**
 
-The openmiio installer included in this repository currently targets the verified **`lumi.gateway.mgl03` / MIPS environment**. Do not use it unchanged on `mgl001` or another Xiaomi Gateway.
+The openmiio/MQTT runtime is managed through the separate
+[`mgl03-homekit-bridge`](https://github.com/leathersocks/mgl03-homekit-bridge)
+repository's `--mode openmiio` installation path. It targets only the verified
+**`lumi.gateway.mgl03` / MIPS environment**. Do not use it on `mgl001` or
+another Xiaomi Gateway.
 
 For openmiio installation, MQTT verification, and BLE event diagnostics, see:
 
-- [`xiaomi-gateway-edge-tools/README.en.md`](xiaomi-gateway-edge-tools/README.en.md) — complete openmiio/MQTT administration tools guide
-- [`xiaomi-gateway-edge-tools/OPENMIIO-SETUP.en.md`](xiaomi-gateway-edge-tools/OPENMIIO-SETUP.en.md) — mgl03 openmiio installation and troubleshooting
+- [`OPENMIIO-RUNTIME.en.md`](OPENMIIO-RUNTIME.en.md) — no-Telnet openmiio-only installation and MQTT diagnostics
 
 To use BLE over MQTT, the Xiaomi Gateway or another device on the same LAN must provide:
 
@@ -303,14 +307,14 @@ BLE MQTT port      = 1883
 
 If the Broker IP is left blank, the driver uses that Xiaomi Gateway's `IP address`.
 
-When connected successfully, the driver subscribes to MQTT topic `#` and automatically processes Xiaomi BLE events.
+When connected successfully, the driver subscribes only to MQTT topics `miio/report` and `central/report` and automatically processes Xiaomi BLE events.
 
 ---
 
 ## MQTT behavior
 
 ```text
-Subscription Topic : #
+Subscription Topics: miio/report, central/report
 Keepalive          : 30 seconds
 PINGREQ            : 15 seconds
 PINGRESP timeout   : 10 seconds
@@ -531,7 +535,7 @@ The following have been verified in an actual SmartThings Hub environment:
 
 - [`TOKEN-GUIDE.en.md`](TOKEN-GUIDE.en.md) — Xiaomi Gateway miIO TOKEN guide
 - [`TOOTHBRUSH-SESSION.en.md`](TOOTHBRUSH-SESSION.en.md) — T700i brushing-session handling
-- [`xiaomi-gateway-edge-tools/README.en.md`](xiaomi-gateway-edge-tools/README.en.md) — openmiio/MQTT setup and BLE diagnostic tools
+- [`OPENMIIO-RUNTIME.en.md`](OPENMIIO-RUNTIME.en.md) — openmiio/MQTT setup and BLE diagnostics
 - [`CHANGELOG.en.md`](CHANGELOG.en.md) — version history
 
 Information needed to reproduce errors or add device support can be shared through GitHub Issues. Before attaching logs, make sure they do not contain sensitive information such as TOKENs, BLE KEYs, or Gateway Keys.

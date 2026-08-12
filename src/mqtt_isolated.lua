@@ -84,6 +84,26 @@ local function existing_context(device)
   return CONTEXTS[device_key(device)]
 end
 
+local function release_context(device, reason)
+  local key = device_key(device)
+  local context = CONTEXTS[key]
+  if not context then
+    return false
+  end
+
+  pcall(function()
+    context.thread:close()
+  end)
+  CONTEXTS[key] = nil
+
+  log.info(string.format(
+    "%s BLE MQTT dedicated thread closed: source=%s",
+    tostring(device.label or device.id or "Xiaomi Gateway"),
+    tostring(reason or "release")
+  ))
+  return true
+end
+
 function mqtt_isolated.status(device)
   local context = existing_context(device)
   return mqtt_ble.status(context and context.proxy or device)
@@ -94,8 +114,14 @@ function mqtt_isolated.start(driver, device, reason)
 
   -- A disabled Gateway never starts the long-running MQTT listener, so there
   -- is no reason to allocate a separate thread until BLE via MQTT is enabled.
-  if not context and not mqtt_enabled(device) then
-    return mqtt_ble.start(driver, device, reason)
+  if not mqtt_enabled(device) then
+    local result = mqtt_ble.start(
+      driver,
+      context and context.proxy or device,
+      reason
+    )
+    release_context(device, "disabled")
+    return result
   end
 
   context = context or get_context(driver, device)
@@ -103,14 +129,7 @@ function mqtt_isolated.start(driver, device, reason)
 end
 
 function mqtt_isolated.restart(driver, device, reason)
-  local context = existing_context(device)
-
-  if not context and not mqtt_enabled(device) then
-    return mqtt_ble.restart(driver, device, reason)
-  end
-
-  context = context or get_context(driver, device)
-  return mqtt_ble.restart(driver, context.proxy, reason)
+  return mqtt_isolated.start(driver, device, reason or "restart")
 end
 
 function mqtt_isolated.stop(device, reason)
@@ -122,15 +141,7 @@ function mqtt_isolated.stop(device, reason)
   )
 
   if context and tostring(reason or "") == "removed" then
-    pcall(function()
-      context.thread:close()
-    end)
-    CONTEXTS[key] = nil
-
-    log.info(string.format(
-      "%s BLE MQTT dedicated thread closed: source=removed",
-      tostring(device.label or device.id or "Xiaomi Gateway")
-    ))
+    release_context(device, "removed")
   end
 
   return result

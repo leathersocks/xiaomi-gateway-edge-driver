@@ -16,6 +16,7 @@ local FAILURE_THRESHOLD = 3
 local AUTO_DISCOVERY_INTERVAL = 300
 local GATEWAY_PROFILE_NAME = "xiaomi-gateway"
 local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1107"
+local SERVICES_STARTED_FIELD = "xiaomi_gateway_services_started"
 
 local function is_gateway_device(device)
   return gateway_runtime.is_gateway(device)
@@ -83,22 +84,23 @@ local function local_now()
   return os.date("!%H:%M:%S", os.time() + (9 * 60 * 60))
 end
 
-local function set_online(device)
-  device:online()
-  child_manager.set_children_reachable(device, true)
-end
-
-local function set_offline(device)
-  child_manager.set_children_reachable(device, false)
-  device:offline()
+local function set_miio_reachable(device, reachable)
+  gateway_runtime.set_miio_reachable(device, reachable)
+  child_manager.set_miio_children_reachable(device, reachable)
+  gateway_runtime.apply_connectivity(device)
 end
 
 local function check_gateway(device, source)
   local ip = get_ip(device)
 
   if ip == "" then
-    diagnostics.record_failure(device, ip, 1)
-    set_offline(device)
+    diagnostics.record_failure(
+      device,
+      ip,
+      1,
+      gateway_runtime.mqtt_reachable(device)
+    )
+    set_miio_reachable(device, false)
     log.warn(string.format(
       "%s health check skipped: IP address is not configured",
       device.label
@@ -107,8 +109,13 @@ local function check_gateway(device, source)
   end
 
   if not miio_probe.valid_ipv4(ip) then
-    diagnostics.record_failure(device, ip, 1)
-    set_offline(device)
+    diagnostics.record_failure(
+      device,
+      ip,
+      1,
+      gateway_runtime.mqtt_reachable(device)
+    )
+    set_miio_reachable(device, false)
     log.warn(string.format(
       "%s health check failed: invalid IPv4 address '%s'",
       device.label,
@@ -123,7 +130,7 @@ local function check_gateway(device, source)
     local last_seen = local_now()
 
     diagnostics.record_success(device, ip, result, last_seen)
-    set_online(device)
+    set_miio_reachable(device, true)
 
     log.info(string.format(
       "%s miIO health check OK: source=%s ip=%s port=%s device_id=%s latency=%dms last_seen=%s timestamp=%s role=%s",
@@ -145,23 +152,25 @@ local function check_gateway(device, source)
     diagnostics.record_failure(
       device,
       ip,
-      FAILURE_THRESHOLD
+      FAILURE_THRESHOLD,
+      gateway_runtime.mqtt_reachable(device)
     )
 
   if failures >= FAILURE_THRESHOLD then
-    set_offline(device)
+    set_miio_reachable(device, false)
 
     log.warn(string.format(
-      "%s miIO health check FAILED/OFFLINE: source=%s ip=%s failures=%d/%d reason=%s",
+      "%s miIO health check FAILED: source=%s ip=%s failures=%d/%d gateway_reachable=%s reason=%s",
       device.label,
       tostring(source or "unknown"),
       ip,
       failures,
       FAILURE_THRESHOLD,
+      gateway_runtime.is_reachable(device) and "true" or "false",
       tostring(result and result.reason or "unknown error")
     ))
   else
-    set_online(device)
+    set_miio_reachable(device, true)
 
     log.warn(string.format(
       "%s miIO health check DEGRADED: source=%s ip=%s failures=%d/%d reason=%s",
@@ -311,13 +320,24 @@ local function log_configuration(device)
   ))
 end
 
-local function start_services(driver, device, source)
+local function start_services(driver, device, source, force)
+  if device:get_field(SERVICES_STARTED_FIELD) == true and not force then
+    log.debug(string.format(
+      "%s service start skipped: source=%s reason=already-started",
+      device.label,
+      tostring(source or "unknown")
+    ))
+    return false
+  end
+
+  device:set_field(SERVICES_STARTED_FIELD, true, { persist = false })
   run_child_sync(driver, device, source)
   schedule_health_check(device)
   schedule_auto_discovery(driver, device)
   schedule_child_state_poll(device)
   start_ble_mqtt(driver, device, source)
   check_gateway(device, source)
+  return true
 end
 
 local function added_handler(driver, device)
@@ -350,7 +370,7 @@ local function info_changed_handler(driver, device, event, args)
 
   log_configuration(device)
   diagnostics.emit_cached(device, get_ip(device))
-  start_services(driver, device, "infoChanged")
+  start_services(driver, device, "infoChanged", true)
 end
 
 local function removed_handler(driver, device)
@@ -362,6 +382,7 @@ local function removed_handler(driver, device)
   cancel_timer(device, "auto_discovery_timer")
   cancel_timer(device, "child_state_timer")
   stop_ble_mqtt(device, "removed")
+  device:set_field(SERVICES_STARTED_FIELD, false, { persist = false })
 end
 
 local driver = Driver("xiaomi-gateway-registration", {

@@ -74,11 +74,12 @@ function diagnostics.record_success(device, ip, result, last_seen)
   emit_cap(device, "status", "gatewayStatus", "online")
 end
 
-function diagnostics.record_failure(device, ip, threshold)
+function diagnostics.record_failure(device, ip, threshold, fallback_reachable)
   local failures = diagnostics.failure_count(device) + 1
   local status = "degraded"
 
-  if threshold ~= nil and failures >= tonumber(threshold) then
+  if threshold ~= nil and failures >= tonumber(threshold) and
+     fallback_reachable ~= true then
     status = "offline"
   end
 

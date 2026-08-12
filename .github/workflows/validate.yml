@@ -1,0 +1,28 @@
+name: Validate
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --disable-pip-version-check PyYAML==6.0.3
+          sudo apt-get update
+          sudo apt-get install --yes lua5.4
+      - name: Validate repository
+        run: python -m unittest discover -s tests -p 'test_*.py'
+      - name: Check Lua syntax
+        run: find src tests -name '*.lua' -print0 | xargs -0 -n1 luac5.4 -p
+      - name: Run pure Lua unit tests
+        run: lua5.4 tests/test_frame_counter.lua

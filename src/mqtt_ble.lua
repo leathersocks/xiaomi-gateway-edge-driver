@@ -4,12 +4,18 @@ local json = require "st.json"
 local log = require "log"
 
 local child_manager = require "child_manager"
+local frame_counter = require "frame_counter"
 local gateway_runtime = require "gateway_runtime"
+local product_registry = require "product_registry"
 
 local mqtt = {}
 
 local DEFAULT_PORT = 1883
-local DEFAULT_TOPIC = "#"
+local DEFAULT_TOPICS = {
+  "miio/report",
+  "central/report",
+}
+local MAX_PACKET_BYTES = 256 * 1024
 local KEEPALIVE_SECONDS = 30
 local PING_INTERVAL_SECONDS = 15
 local PING_RESPONSE_TIMEOUT_SECONDS = 10
@@ -17,21 +23,20 @@ local READ_TIMEOUT_SECONDS = 5
 local RECONNECT_SECONDS = 3
 
 local GENERATION_FIELD = "xiaomi_ble_mqtt_generation"
-local STATE_FIELD = "xiaomi_ble_mqtt_state"
-
 -- Runtime sockets are kept in-memory rather than in SmartThings device fields.
 -- This avoids storing a cosock userdata object through device:set_field().
 local ACTIVE_SOCKETS = {}
 local LAST_SEQ_PREFIX = "xiaomi_ble_mqtt_seq_"
 
-local EID_TEMPERATURE = 19457
-local EID_HUMIDITY = 19458
-local EID_BATTERY = 18435
-
-local PDID_TEMP_HUMIDITY = 5860
-local PDID_TOOTHBRUSH_T700I = 6032
-local EID_TOOTHBRUSH_EVENT = 12291 -- 0x3003
-local EID_STANDARD_BATTERY = 4106  -- 0x100A
+local PDID_TEMP_HUMIDITY = product_registry.PDID.TEMP_HUMIDITY
+local PDID_TOOTHBRUSH_T700I = product_registry.PDID.TOOTHBRUSH_T700I
+local TEMP_HUMIDITY_PRODUCT = product_registry.ble_product(PDID_TEMP_HUMIDITY)
+local TOOTHBRUSH_PRODUCT = product_registry.ble_product(PDID_TOOTHBRUSH_T700I)
+local EID_TEMPERATURE = TEMP_HUMIDITY_PRODUCT.events.temperature
+local EID_HUMIDITY = TEMP_HUMIDITY_PRODUCT.events.humidity
+local EID_BATTERY = TEMP_HUMIDITY_PRODUCT.events.battery
+local EID_TOOTHBRUSH_EVENT = TOOTHBRUSH_PRODUCT.events.state
+local EID_STANDARD_BATTERY = TOOTHBRUSH_PRODUCT.events.battery
 local TOOTHBRUSH_LIVE_WINDOW_SECONDS = 60
 local TOOTHBRUSH_MAX_SESSION_SECONDS = 10 * 60
 local TOOTHBRUSH_WATCHDOG_SECONDS = 30
@@ -105,10 +110,12 @@ local function broker_port(source)
   return math.floor(value)
 end
 
-local function broker_topic(source)
-  -- v1.7.7: topic is intentionally fixed internally.
-  -- "#" covers both miio/report and central/report.
-  return DEFAULT_TOPIC
+local function broker_topics(source)
+  return DEFAULT_TOPICS
+end
+
+local function broker_topic_summary(source)
+  return table.concat(broker_topics(source), ",")
 end
 
 local function applicable(source)
@@ -438,7 +445,7 @@ local function log_toothbrush_raw_packet(source, params, topic)
     )
   end
 
-  log.info(string.format(
+  log.debug(string.format(
     "%s BLE MQTT T700i RAW: topic=%s did=%s mac=%s pdid=%s frmCnt=%s gwts=%s events=[%s]",
     tostring(source.label or "Xiaomi Gateway"),
     tostring(topic or ""),
@@ -732,21 +739,37 @@ local function process_ble_params(driver, source, params, topic)
   local sequence_owner = parent or source
 
   local previous_sequence = sequence_owner:get_field(sequence_field)
-  if sequence and previous_sequence == sequence then
-    if pdid == PDID_TOOTHBRUSH_T700I then
+  local sequence_class = frame_counter.classify(
+    previous_sequence,
+    sequence,
+    params.gwts,
+    os.time()
+  )
+  if sequence_class == "duplicate" or sequence_class == "stale" then
+    if pdid == PDID_TOOTHBRUSH_T700I and
+       sequence_class == "duplicate" then
       refresh_duplicate_toothbrush_watchdog(
         child,
         params,
         source.label
       )
     end
+
+    log.debug(string.format(
+      "%s BLE MQTT frame ignored: reason=%s did=%s mac=%s frmCnt=%s",
+      tostring(source.label or "Xiaomi Gateway"),
+      sequence_class,
+      did,
+      tostring(dev.mac or ""),
+      tostring(sequence or "")
+    ))
     return 0
   end
 
   if sequence then
     sequence_owner:set_field(
       sequence_field,
-      sequence,
+      frame_counter.record(sequence, params.gwts, os.time()),
       { persist = false }
     )
   end
@@ -1030,6 +1053,14 @@ local function read_packet(sock)
     end
   end
 
+  if remaining > MAX_PACKET_BYTES then
+    return nil, nil, string.format(
+      "MQTT packet exceeds %d-byte limit: %d",
+      MAX_PACKET_BYTES,
+      remaining
+    )
+  end
+
   local body = ""
   if remaining > 0 then
     body, first_err = receive_exact(sock, remaining)
@@ -1073,6 +1104,9 @@ local function parse_publish(first, body)
   local position = 3 + topic_length
 
   local qos = (first >> 1) & 0x03
+  if qos == 3 then
+    return nil, nil, "invalid MQTT PUBLISH QoS"
+  end
   if qos > 0 then
     if #body < position + 1 then
       return nil, nil, "short MQTT packet identifier"
@@ -1122,16 +1156,18 @@ local function mqtt_handshake(sock, source)
     source.label
   ))
 
-  local topic = broker_topic(source)
-  local subscribe_body =
-    encode_u16(1) ..
-    encode_string(topic) ..
-    string.char(0)
+  local topics = broker_topics(source)
+  local subscribe_parts = { encode_u16(1) }
+  for _, topic in ipairs(topics) do
+    subscribe_parts[#subscribe_parts + 1] = encode_string(topic)
+    subscribe_parts[#subscribe_parts + 1] = string.char(0)
+  end
+  local subscribe_body = table.concat(subscribe_parts)
 
   log.info(string.format(
-    "%s BLE MQTT SUBSCRIBE sending: topic=%s",
+    "%s BLE MQTT SUBSCRIBE sending: topics=%s",
     source.label,
-    topic
+    broker_topic_summary(source)
   ))
 
   ok, err = send_packet(sock, 0x82, subscribe_body)
@@ -1144,10 +1180,24 @@ local function mqtt_handshake(sock, source)
     return false, "SUBACK read failed: " .. tostring(read_err)
   end
 
+  if #body ~= 2 + #topics or body:byte(1) ~= 0 or body:byte(2) ~= 1 then
+    return false, "malformed SUBACK"
+  end
+  for index = 1, #topics do
+    local result = body:byte(2 + index)
+    if result ~= 0 then
+      return false, string.format(
+        "SUBACK rejected topic %s with code %s",
+        topics[index],
+        tostring(result)
+      )
+    end
+  end
+
   log.info(string.format(
-    "%s BLE MQTT SUBACK OK: topic=%s",
+    "%s BLE MQTT SUBACK OK: topics=%s",
     source.label,
-    topic
+    broker_topic_summary(source)
   ))
 
   return true
@@ -1176,17 +1226,24 @@ local function socket_key(source)
 end
 
 local function set_state(source, value)
-  source:set_field(STATE_FIELD, tostring(value or "unknown"), { persist = false })
+  local previous = gateway_runtime.mqtt_state(source)
+  local current = tostring(value or "unknown")
+
+  gateway_runtime.set_mqtt_state(source, current)
+
+  if current == "subscribed" then
+    child_manager.set_ble_children_reachable(source, true)
+  elseif previous == "subscribed" or
+         current == "disabled" or
+         current == "stopped" then
+    child_manager.set_ble_children_reachable(source, false)
+  end
+
+  gateway_runtime.apply_connectivity(source)
 end
 
 function mqtt.status(source)
-  local value = source:get_field(STATE_FIELD)
-
-  if value == nil then
-    return "never-started"
-  end
-
-  return tostring(value)
+  return gateway_runtime.mqtt_state(source)
 end
 
 local function listen_session(driver, source, generation)
@@ -1195,12 +1252,12 @@ local function listen_session(driver, source, generation)
   local key = socket_key(source)
 
   log.info(string.format(
-    "%s BLE MQTT session attempt: generation=%d broker=%s:%d topic=%s",
+    "%s BLE MQTT session attempt: generation=%d broker=%s:%d topics=%s",
     source.label,
     generation,
     tostring(ip),
     port,
-    broker_topic(source)
+    broker_topic_summary(source)
   ))
 
   if not valid_ipv4(ip) then
@@ -1254,11 +1311,11 @@ local function listen_session(driver, source, generation)
   set_state(source, "subscribed")
 
   log.info(string.format(
-    "%s BLE MQTT connected: broker=%s:%d topic=%s auto_ble_parent=true generation=%d",
+    "%s BLE MQTT connected: broker=%s:%d topics=%s auto_ble_parent=true generation=%d",
     source.label,
     ip,
     port,
-    broker_topic(source),
+    broker_topic_summary(source),
     generation
   ))
 
@@ -1321,7 +1378,7 @@ local function listen_session(driver, source, generation)
           -- diagnostics and duplicate state processing.
           if topic == "miio/report" or topic == "central/report" then
             if tostring(payload):find("_async.ble_event", 1, true) then
-              log.info(string.format(
+              log.debug(string.format(
                 "%s BLE MQTT PUBLISH matched BLE event: topic=%s bytes=%d",
                 source.label,
                 tostring(topic),
@@ -1358,14 +1415,14 @@ local function schedule_session(driver, source, generation, delay_seconds, reaso
   set_state(source, "scheduled")
 
   log.info(string.format(
-    "%s BLE MQTT listener scheduled: source=%s generation=%d delay=%ss broker=%s:%d topic=%s",
+    "%s BLE MQTT listener scheduled: source=%s generation=%d delay=%ss broker=%s:%d topics=%s",
     source.label,
     tostring(reason or "unknown"),
     generation,
     tostring(delay_seconds),
     broker_ip(source),
     broker_port(source),
-    broker_topic(source)
+    broker_topic_summary(source)
   ))
 
   source.thread:call_with_delay(
@@ -1474,7 +1531,7 @@ end
 function mqtt.start(driver, source, reason)
   local ip = broker_ip(source)
   local port = broker_port(source)
-  local topic = broker_topic(source)
+  local topics = broker_topic_summary(source)
 
   if not applicable(source) then
     log.debug(string.format(
@@ -1488,13 +1545,13 @@ function mqtt.start(driver, source, reason)
   end
 
   log.info(string.format(
-    "%s BLE MQTT start requested: source=%s enabled=%s broker=%s:%d topic=%s previous_state=%s",
+    "%s BLE MQTT start requested: source=%s enabled=%s broker=%s:%d topics=%s previous_state=%s",
     source.label,
     tostring(reason or "unknown"),
     enabled(source) and "true" or "false",
     tostring(ip),
     port,
-    topic,
+    topics,
     mqtt.status(source)
   ))
 

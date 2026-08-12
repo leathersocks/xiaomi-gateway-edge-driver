@@ -1,2 +1,2 @@
-v1.10.8-final-verified
-2026-08-09
+v1.11.0-runtime-hardening
+2026-08-12

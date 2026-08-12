@@ -18,6 +18,7 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 - miIO TOKEN 기반 Xiaomi 자식 장치 자동 검색
 - 지원되는 Zigbee 온습도 장치 상태 polling
 - BLE over MQTT 수신
+- miIO와 MQTT를 분리 판정해 한 전송 경로 장애가 다른 자식 유형에 전파되지 않음
 - 여러 Xiaomi Gateway 등록 가능
 
 #### 실제 동작을 확인한 Gateway
@@ -153,12 +154,15 @@ openmiio는 모든 사용자가 설치해야 하는 구성 요소가 아닙니�
 
 즉, Gateway 상태 확인이나 Zigbee 장치만 사용할 경우에는 openmiio를 설치하지 않아도 됩니다. **BLE 온습도 센서 또는 T700i를 사용할 때만 먼저 MQTT BLE 이벤트가 이미 제공되는지 확인하고, 제공되지 않는 경우 openmiio를 설치하세요.**
 
-현재 저장소의 openmiio 설치 도구는 실제 확인된 **`lumi.gateway.mgl03` / MIPS 환경**을 대상으로 합니다. `mgl001`이나 다른 Xiaomi Gateway에 그대로 사용하면 안 됩니다.
+openmiio/MQTT 런타임은 별도
+[`mgl03-homekit-bridge`](https://github.com/leathersocks/mgl03-homekit-bridge)
+저장소의 `--mode openmiio` 설치 경로로 관리합니다. 지원 대상은 실제 확인된
+**`lumi.gateway.mgl03` / MIPS 환경**이며 `mgl001`이나 다른 Xiaomi Gateway에
+사용하면 안 됩니다.
 
 openmiio 설치, MQTT 확인, BLE 이벤트 진단 방법은 다음 문서를 참고하세요.
 
-- [`xiaomi-gateway-edge-tools/README.md`](xiaomi-gateway-edge-tools/README.md) — openmiio/MQTT 관리 도구 전체 사용 가이드
-- [`xiaomi-gateway-edge-tools/OPENMIIO-SETUP.md`](xiaomi-gateway-edge-tools/OPENMIIO-SETUP.md) — mgl03 openmiio 설치 및 문제 해결 절차
+- [`OPENMIIO-RUNTIME.md`](OPENMIIO-RUNTIME.md) — Telnet 없는 openmiio 전용 설치와 MQTT 진단
 
 BLE over MQTT를 사용하려면 Xiaomi Gateway 또는 같은 LAN의 장치에서 다음 서비스가 필요합니다.
 
@@ -302,14 +306,14 @@ BLE MQTT port      = 1883
 
 Broker IP를 비워두면 해당 Xiaomi Gateway의 `IP address`를 사용합니다.
 
-정상 연결 시 드라이버는 MQTT topic `#`을 구독하고 Xiaomi BLE 이벤트를 자동으로 처리합니다.
+정상 연결 시 드라이버는 MQTT topic `miio/report`와 `central/report`만 구독하고 Xiaomi BLE 이벤트를 자동으로 처리합니다.
 
 ---
 
 ## MQTT 기본 동작
 
 ```text
-Subscription Topic : #
+Subscription Topics: miio/report, central/report
 Keepalive          : 30초
 PINGREQ            : 15초
 PINGRESP timeout   : 10초
@@ -530,7 +534,7 @@ Windows에서는 다음 스크립트도 사용할 수 있습니다.
 
 - [`TOKEN-GUIDE.md`](TOKEN-GUIDE.md) — Xiaomi Gateway miIO TOKEN 설명
 - [`TOOTHBRUSH-SESSION.md`](TOOTHBRUSH-SESSION.md) — T700i 양치 세션 처리
-- [`xiaomi-gateway-edge-tools/README.md`](xiaomi-gateway-edge-tools/README.md) — openmiio/MQTT 설치 및 BLE 진단 도구 가이드
+- [`OPENMIIO-RUNTIME.md`](OPENMIIO-RUNTIME.md) — openmiio/MQTT 설치 및 BLE 진단 가이드
 - [`CHANGELOG.md`](CHANGELOG.md) — 버전별 변경 이력
 
 오류 재현이나 지원 장치 추가에 필요한 정보는 GitHub Issue를 통해 공유할 수 있습니다. 로그를 첨부할 때는 TOKEN, BLE KEY, Gateway Key 등 민감정보가 포함되지 않았는지 반드시 확인하세요.

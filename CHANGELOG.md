@@ -11,6 +11,26 @@
 
 ---
 
+## v1.11.0-runtime-hardening — 2026-08-12
+
+- Gateway 온라인 상태를 miIO 하나가 아니라 miIO와 MQTT 전송 경로의 합성 상태로
+  판정하도록 변경했습니다. miIO 점검만 실패해도 정상 MQTT BLE 자식까지 모두
+  오프라인이 되던 문제를 수정하고, BLE와 miIO 자식의 도달 상태를 분리했습니다.
+- MQTT 와일드카드 `#` 구독을 제거하고 `miio/report`, `central/report`만 하나의
+  SUBSCRIBE 패킷으로 구독합니다. SUBACK 결과 코드와 패킷 식별자를 검증하고
+  입력 패킷을 256 KiB로 제한했습니다.
+- 8비트 `frmCnt`의 중복, 역순, wrap-around와 장치 재시작을 구분하는 공통 프레임
+  판정 모듈을 추가했습니다.
+- BLE 제품 ID, 모델, 프로필과 EID 매핑을 `product_registry.lua`로 통합했습니다.
+- `added` 다음 `init`에서 서비스가 중복 시작되지 않도록 수명주기 가드를 추가하고,
+  BLE MQTT를 끄면 전용 Thread도 닫도록 수정했습니다.
+- Zigbee 검색 인벤토리를 영구 필드로 저장해 드라이버 재시작 직후 상태 polling이
+  사라지지 않도록 했습니다.
+- 게이트웨이 런타임 설치 책임을 `mgl03-homekit-bridge --mode openmiio`로 통합하고
+  저장소 안의 구형 Telnet 설치기와 중복 진단 도구를 제거했습니다.
+- 한국어·영어 런타임 안내서와 저장소 검증 테스트/CI를 추가하고 배포 체크섬을
+  현재 파일로 다시 생성했습니다.
+
 ## v1.10.8-final-verified — 2026-08-09
 
 - 장시간 실행되는 BLE MQTT listener가 Gateway의 `device.thread`를 점유해 MQTT receiver Gateway의 주기적 miIO Health Check가 실행되지 않던 문제를 수정했습니다.
