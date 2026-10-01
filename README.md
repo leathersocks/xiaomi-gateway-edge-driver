@@ -18,7 +18,7 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 - miIO TOKEN 기반 Xiaomi 자식 장치 자동 검색
 - 지원되는 Zigbee 온습도 장치 상태 polling
 - BLE over MQTT 수신
-- Gateway 상세 화면에 연결된 자식 장치 수와 이름/모델 목록 표시
+- Gateway 상세 화면의 기본 브릿지 카드로 연결된 자식 장치 표시 및 이동
 - miIO와 MQTT를 분리 판정해 한 전송 경로 장애가 다른 자식 유형에 전파되지 않음
 - 여러 Xiaomi Gateway 등록 가능
 
@@ -47,13 +47,16 @@ BLE 온습도 센서와 T700i가 포함됩니다.
 실제 카드 배치와 탭 이동은 SmartThings 앱이 구현하므로, 앱 버전별로 휴대폰에서
 확인해야 합니다. [공식 Hue LAN 브릿지 프로필](https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers/blob/main/drivers/SmartThings/philips-hue/profiles/hue-bridge.yml)도 같은 분류를 사용합니다.
 
-기존 장치 수/이름 요약 Capability도 API 조회와 일반 상세 화면용으로 유지합니다.
+상세 화면은 **상태 → Gateway 화면 → 브릿지에 연결된 기기** 순서로 구성합니다.
+맨 위 상태 카드는 유지하고, 중복 상태 카드와 텍스트형 장치 수/이름 카드는 숨깁니다.
+
+기존 장치 수/이름 요약 Capability는 API 조회와 진단용으로 유지합니다.
 요약은 초기화·검색·등록·이름 변경·삭제 시 갱신되며, 긴 목록은 `... (+N)`으로
 줄여 표시합니다. 이 텍스트 자체에 링크를 넣는 방식은 사용하지 않습니다.
 
 장치 수는 현재 온라인인 장치 수가 아니라 해당 Gateway 아래에 등록된 장치 수입니다.
 목록은 전용 `locketforest19027.connectedDevices` Capability를 사용합니다.
-`sync-ui.ps1`은 최초 실행 시 이 Capability를 생성하고 상태/목록 화면의 번역을 함께 동기화합니다.
+`sync-ui.ps1`은 최초 실행 시 이 Capability를 생성하고 번역과 카드 표시 설정을 함께 동기화합니다.
 
 #### 브릿지 설정 메뉴가 보이지 않을 때
 

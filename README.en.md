@@ -18,7 +18,7 @@ The current version uses local Xiaomi miIO communication and MQTT and is designe
 - miIO TOKEN-based Xiaomi child-device discovery
 - State polling for supported Zigbee temperature/humidity devices
 - BLE over MQTT reception
-- Connected child count and name/model list in the Gateway detail view
+- Native bridge child-device cards and navigation in the Gateway detail view
 - Independent miIO/MQTT health so one transport failure does not take unrelated children offline
 - Multiple Xiaomi Gateways can be registered
 
@@ -46,13 +46,16 @@ bridge UI category**, not a conversion to Matter or a way to add the Matter logo
 Card layout and tap navigation are app-owned and need confirmation on the installed
 phone app version. The [official Hue LAN bridge profile](https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers/blob/main/drivers/SmartThings/philips-hue/profiles/hue-bridge.yml) uses the same category.
 
-The count/name summary capability remains available for API queries and the normal
-detail view. It refreshes after initialization, discovery, registration, renaming,
+The detail screen is organized as **Status → Gateway view → Devices connected to bridge**.
+The top status card remains; the duplicate status and text count/name cards are hidden.
+
+The count/name summary capability remains available for API queries and diagnostics.
+It refreshes after initialization, discovery, registration, renaming,
 and removal, abbreviating long lists as `... (+N)`. The summary text itself is not a link.
 
 The count represents registered children, not the number of devices currently online.
 The inventory uses the dedicated `locketforest19027.connectedDevices` capability.
-On first use, `sync-ui.ps1` creates it and synchronizes translations for both status and inventory views.
+On first use, `sync-ui.ps1` creates it and synchronizes translations and card visibility.
 
 #### Restoring the settings view
 

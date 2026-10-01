@@ -25,32 +25,7 @@
     "actions": [],
     "basicPlus": []
   },
-  "detailView": [
-    {
-      "label": "{{i18n.label}}",
-      "displayType": "state",
-      "state": {
-        "label": "{{gatewayStatus.value}}",
-        "alternatives": [
-          {
-            "key": "online",
-            "value": "{{i18n.attributes.gatewayStatus.i18n.value.online.label}}",
-            "type": "active"
-          },
-          {
-            "key": "degraded",
-            "value": "{{i18n.attributes.gatewayStatus.i18n.value.degraded.label}}",
-            "type": "active"
-          },
-          {
-            "key": "offline",
-            "value": "{{i18n.attributes.gatewayStatus.i18n.value.offline.label}}",
-            "type": "inactive"
-          }
-        ]
-      }
-    }
-  ],
+  "detailView": [],
   "automation": {
     "conditions": [],
     "actions": []

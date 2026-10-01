@@ -11,6 +11,13 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.13.2-bridge-ui-cleanup — 2026-10-01
+
+- Kept the top status card and hid the duplicate status and text inventory detail cards.
+- The detail layout is `Status → Gateway view → Devices connected to bridge`.
+- Preserved health checks, count/name events, native child cards, and view switching.
+- Refreshed existing gateway profiles for the updated UI without changing device IDs, rooms, parents, or preferences.
+
 ## v1.13.1-native-bridge-view — 2026-10-01
 
 - Replaced ineffective `devices:update` category overrides with a dedicated `gatewayView:setView` command that changes the profile in the driver.

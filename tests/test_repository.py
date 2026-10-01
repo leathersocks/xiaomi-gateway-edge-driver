@@ -72,9 +72,9 @@ class RepositoryTests(unittest.TestCase):
                 / "xiaomiGatewayDevices-presentation.template.json"
             ).read_text(encoding="utf-8")
         )
-        detail = json.dumps(presentation["detailView"])
-        self.assertIn("connectedDeviceCount.value", detail)
-        self.assertIn("connectedDevices.value", detail)
+        # Keep inventory attributes/events available without a duplicate text card.
+        self.assertEqual(presentation["detailView"], [])
+        self.assertEqual(presentation["dashboard"]["states"], [])
 
         for tag in ("en", "ko", "ko-KR"):
             translation = json.loads(
@@ -100,6 +100,27 @@ class RepositoryTests(unittest.TestCase):
         profile_caps = {c["id"] for c in profile["components"][0]["capabilities"]}
         self.assertIn("locketforest19027." + definition["id"], profile_caps)
         self.assertEqual(definition["id"], "connectedDevices")
+
+    def test_gateway_layout_has_one_status_and_view_selector(self):
+        status = json.loads(
+            (ROOT / "capabilities" / "xiaomiGatewayStatus-presentation.template.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertEqual(status["detailView"], [])
+        self.assertEqual(len(status["dashboard"]["states"]), 1)
+        state = status["dashboard"]["states"][0]
+        self.assertEqual(state["label"], "{{gatewayStatus.value}}")
+        self.assertEqual(
+            [item["key"] for item in state["alternatives"]],
+            ["online", "degraded", "offline"],
+        )
+        view = json.loads(
+            (ROOT / "capabilities" / "gatewayView-presentation.template.json")
+            .read_text(encoding="utf-8")
+        )
+        self.assertEqual(len(view["detailView"]), 1)
+        self.assertEqual(view["detailView"][0]["displayType"], "list")
+        self.assertEqual(view["detailView"][0]["list"]["command"]["name"], "setView")
 
     def test_native_bridge_view_preserves_setup_and_child_identity(self):
         profiles = ROOT / "profiles"

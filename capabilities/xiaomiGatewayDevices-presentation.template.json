@@ -4,22 +4,7 @@
     "actions": [],
     "basicPlus": []
   },
-  "detailView": [
-    {
-      "label": "{{i18n.attributes.connectedDeviceCount.label}}",
-      "displayType": "state",
-      "state": {
-        "label": "{{connectedDeviceCount.value}}"
-      }
-    },
-    {
-      "label": "{{i18n.attributes.connectedDevices.label}}",
-      "displayType": "state",
-      "state": {
-        "label": "{{connectedDevices.value}}"
-      }
-    }
-  ],
+  "detailView": [],
   "automation": {
     "conditions": [],
     "actions": []
