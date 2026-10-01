@@ -55,6 +55,39 @@ class RepositoryTests(unittest.TestCase):
             text = (ROOT / changelog).read_text(encoding="utf-8")
             self.assertIn(f"## {version} — {date}", text)
 
+    def test_gateway_capability_exposes_connected_devices(self):
+        definition = json.loads(
+            (ROOT / "capabilities" / "xiaomiGatewayStatus.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        attributes = definition["attributes"]
+        self.assertIn("connectedDeviceCount", attributes)
+        self.assertIn("connectedDevices", attributes)
+
+        presentation = json.loads(
+            (
+                ROOT
+                / "capabilities"
+                / "xiaomiGatewayStatus-presentation.template.json"
+            ).read_text(encoding="utf-8")
+        )
+        detail = json.dumps(presentation["detailView"])
+        self.assertIn("connectedDeviceCount.value", detail)
+        self.assertIn("connectedDevices.value", detail)
+
+        for tag in ("en", "ko", "ko-KR"):
+            translation = json.loads(
+                (
+                    ROOT
+                    / "translations"
+                    / f"xiaomiGatewayStatus-{tag}.json"
+                ).read_text(encoding="utf-8")
+            )
+            translated = translation["attributes"]
+            self.assertIn("connectedDeviceCount", translated)
+            self.assertIn("connectedDevices", translated)
+
     def test_checksum_manifest_entries_are_current(self):
         for line in (ROOT / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
             if not line.strip():

@@ -18,6 +18,7 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 - miIO TOKEN 기반 Xiaomi 자식 장치 자동 검색
 - 지원되는 Zigbee 온습도 장치 상태 polling
 - BLE over MQTT 수신
+- Gateway 상세 화면에 연결된 자식 장치 수와 이름/모델 목록 표시
 - miIO와 MQTT를 분리 판정해 한 전송 경로 장애가 다른 자식 유형에 전파되지 않음
 - 여러 Xiaomi Gateway 등록 가능
 
@@ -31,6 +32,18 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 | Xiaomi Mijia Smart Multi-Mode Gateway | `lumi.gateway.mgl03` | `ZNDMWG03LM` / `ZNDMWG02LM` 계열 | `1.5.0_0026` | miIO 상태 확인 / openmiio / MQTT BLE 수신 |
 
 > 위 펌웨어 버전은 실제 테스트 환경에서 확인한 버전이며, 지원 가능한 최소/최대 펌웨어 버전을 의미하지 않습니다. 같은 내부 모델이라도 지역판, 펌웨어 또는 하드웨어 리비전에 따라 동작 차이가 있을 수 있습니다.
+
+#### 연결된 장치 표시
+
+Gateway 장치의 상세 화면에는 이 드라이버가 해당 Gateway 아래에 등록한
+SmartThings `EDGE_CHILD` 장치 수와 이름/모델 목록이 표시됩니다. 자동 검색된
+Zigbee 장치, MQTT 광고로 등록된 BLE 온습도 센서와 T700i가 포함됩니다.
+
+목록은 Gateway 또는 자식 장치가 초기화되거나, 자동 검색이 완료되거나, BLE
+자식이 등록되거나 이름이 변경되거나 삭제될 때 자동으로 갱신됩니다. 장치가 많아 한 화면에 모두
+표시할 수 없으면 남은 장치 수를 `... (+N)` 형식으로 표시합니다.
+
+장치 수는 현재 온라인인 장치 수가 아니라 해당 Gateway 아래에 등록된 장치 수입니다.
 
 ### Xiaomi BLE 장치
 

@@ -15,8 +15,9 @@ local PROBE_TIMEOUT = 3
 local FAILURE_THRESHOLD = 3
 local AUTO_DISCOVERY_INTERVAL = 300
 local GATEWAY_PROFILE_NAME = "xiaomi-gateway"
-local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1107"
+local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1120"
 local SERVICES_STARTED_FIELD = "xiaomi_gateway_services_started"
+local CHILD_PARENT_ID_FIELD = "xiaomi_gateway_parent_device_id"
 
 local function is_gateway_device(device)
   return gateway_runtime.is_gateway(device)
@@ -223,6 +224,7 @@ end
 
 local function run_child_sync(driver, device, source)
   auto_discovery.sync(driver, device, source)
+  diagnostics.emit_connected_devices(device)
 
   if child_state.enabled(device) then
     child_state.poll(
@@ -230,6 +232,48 @@ local function run_child_sync(driver, device, source)
       tostring(source or "sync") .. ".state"
     )
   end
+end
+
+local function refresh_child_parent_summary(driver, child, exclude_child)
+  local parent_id = tostring(
+    child.parent_device_id or
+    child:get_field(CHILD_PARENT_ID_FIELD) or
+    ""
+  )
+
+  for _, candidate in ipairs(driver:get_devices() or {}) do
+    if is_gateway_device(candidate) then
+      local matched =
+        parent_id ~= "" and tostring(candidate.id or "") == parent_id
+
+      if not matched then
+        for _, current_child in ipairs(candidate:get_child_list() or {}) do
+          if tostring(current_child.id or "") == tostring(child.id or "") then
+            matched = true
+            break
+          end
+        end
+      end
+
+      if matched then
+        if not exclude_child then
+          child:set_field(
+            CHILD_PARENT_ID_FIELD,
+            tostring(candidate.id or ""),
+            { persist = true }
+          )
+        end
+
+        diagnostics.emit_connected_devices(
+          candidate,
+          exclude_child and child.id or nil
+        )
+        return true
+      end
+    end
+  end
+
+  return false
 end
 
 local function schedule_auto_discovery(driver, device)
@@ -252,6 +296,7 @@ local function schedule_auto_discovery(driver, device)
           device,
           "scheduled"
         )
+        diagnostics.emit_connected_devices(device)
       end,
       "xiaomi gateway child discovery"
     )
@@ -343,6 +388,7 @@ end
 local function added_handler(driver, device)
   if not is_gateway_device(device) then
     child_manager.initialize_child(device)
+    refresh_child_parent_summary(driver, device, false)
     return
   end
 
@@ -355,6 +401,7 @@ end
 local function init_handler(driver, device)
   if not is_gateway_device(device) then
     child_manager.initialize_child(device)
+    refresh_child_parent_summary(driver, device, false)
     return
   end
 
@@ -365,6 +412,7 @@ end
 
 local function info_changed_handler(driver, device, event, args)
   if not is_gateway_device(device) then
+    refresh_child_parent_summary(driver, device, false)
     return
   end
 
@@ -375,6 +423,7 @@ end
 
 local function removed_handler(driver, device)
   if not is_gateway_device(device) then
+    refresh_child_parent_summary(driver, device, true)
     return
   end
 

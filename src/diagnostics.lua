@@ -2,6 +2,7 @@ local capabilities = require "st.capabilities"
 local log = require "log"
 
 local capability_ids = require "generated_capabilities"
+local device_summary = require "device_summary"
 local diagnostics = {}
 
 local FIELD_DEVICE_ID = "xiaomi_gateway_device_id"
@@ -9,6 +10,8 @@ local FIELD_LATENCY_MS = "xiaomi_gateway_latency_ms"
 local FIELD_LAST_SEEN = "xiaomi_gateway_last_seen"
 local FIELD_FAILURE_COUNT = "xiaomi_gateway_failure_count"
 local FIELD_GATEWAY_STATUS = "xiaomi_gateway_status"
+local FIELD_CONNECTED_DEVICE_COUNT = "xiaomi_gateway_connected_device_count"
+local FIELD_CONNECTED_DEVICES = "xiaomi_gateway_connected_devices"
 
 local caps = {}
 
@@ -91,11 +94,45 @@ function diagnostics.record_failure(device, ip, threshold, fallback_reachable)
   return failures
 end
 
+function diagnostics.emit_connected_devices(device, excluded_child_id)
+  local summary = device_summary.build(
+    device:get_child_list() or {},
+    excluded_child_id,
+    512
+  )
+
+  set_persistent(device, FIELD_CONNECTED_DEVICE_COUNT, summary.count)
+  set_persistent(device, FIELD_CONNECTED_DEVICES, summary.text)
+
+  emit_cap(
+    device,
+    "status",
+    "connectedDeviceCount",
+    summary.count
+  )
+  emit_cap(
+    device,
+    "status",
+    "connectedDevices",
+    summary.text
+  )
+
+  log.info(string.format(
+    "%s connected device summary updated: count=%d devices=%s",
+    tostring(device.label or device.id),
+    summary.count,
+    summary.text
+  ))
+
+  return summary
+end
+
 function diagnostics.emit_cached(device, ip)
   local value = device:get_field(FIELD_GATEWAY_STATUS)
   local status = value == nil and "offline" or tostring(value)
 
   emit_cap(device, "status", "gatewayStatus", status)
+  diagnostics.emit_connected_devices(device)
 end
 
 return diagnostics

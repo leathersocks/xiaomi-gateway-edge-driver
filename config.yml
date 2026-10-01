@@ -1,7 +1,8 @@
 name: Xiaomi Gateway
 packageKey: xiaomi-gateway
-description: Xiaomi gateway Edge driver with isolated miIO and MQTT transport health,
-  BLE temperature/humidity, and T700i toothbrush session support
+description: Xiaomi gateway Edge driver with connected-device inventory, isolated
+  miIO and MQTT transport health, BLE temperature/humidity, and T700i toothbrush
+  session support
 vendorSupportInformation: Community experimental driver
 permissions:
   lan: {}

@@ -18,6 +18,7 @@ The current version uses local Xiaomi miIO communication and MQTT and is designe
 - miIO TOKEN-based Xiaomi child-device discovery
 - State polling for supported Zigbee temperature/humidity devices
 - BLE over MQTT reception
+- Connected child count and name/model list in the Gateway detail view
 - Independent miIO/MQTT health so one transport failure does not take unrelated children offline
 - Multiple Xiaomi Gateways can be registered
 
@@ -31,6 +32,19 @@ The following Xiaomi Gateways have been verified in an actual SmartThings Hub en
 | Xiaomi Mijia Smart Multi-Mode Gateway | `lumi.gateway.mgl03` | `ZNDMWG03LM` / `ZNDMWG02LM` family | `1.5.0_0026` | miIO health check / openmiio / MQTT BLE reception |
 
 > The firmware versions above are versions verified in the actual test environment. They do not define minimum or maximum supported firmware versions. Behavior may differ by regional variant, firmware, or hardware revision even when the internal model is the same.
+
+#### Connected-device display
+
+The Gateway detail view shows the number and name/model list of SmartThings
+`EDGE_CHILD` devices registered by this driver under that Gateway. This includes
+automatically discovered Zigbee devices and BLE temperature/humidity sensors or
+T700i toothbrushes registered from MQTT advertisements.
+
+The list refreshes when the Gateway or a child initializes, automatic discovery
+completes, or a BLE child is registered, renamed, or removed. If the complete list does not
+fit in one state value, omitted devices are shown as `... (+N)`.
+
+The count represents registered children, not the number of devices currently online.
 
 ### Xiaomi BLE devices
 

@@ -11,6 +11,19 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.12.0-connected-devices — 2026-10-01
+
+- Added `Connected device count` and `Connected devices` states to the Gateway
+  detail view.
+- Lists SmartThings-registered `EDGE_CHILD` devices in name/model order and
+  counts a repeated device ID only once.
+- Truncates long lists safely and reports omitted entries as `... (+N)` to stay
+  within the capability event size limit.
+- Refreshes the summary during Gateway/child initialization, completed automatic
+  discovery, BLE child registration, renaming, and child removal.
+- Updated the profile refresh marker so existing Gateway devices request the new
+  Capability Presentation.
+
 ## v1.11.0-runtime-hardening — 2026-08-12
 
 - Changed Gateway reachability from a miIO-only decision to aggregated miIO

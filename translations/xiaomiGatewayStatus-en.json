@@ -18,6 +18,14 @@
           }
         }
       }
+    },
+    "connectedDeviceCount": {
+      "label": "Connected device count",
+      "displayTemplate": "{{attribute}}: {{value}}"
+    },
+    "connectedDevices": {
+      "label": "Connected devices",
+      "displayTemplate": "{{attribute}}: {{value}}"
     }
   }
 }
