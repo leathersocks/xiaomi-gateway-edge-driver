@@ -15,7 +15,7 @@ local PROBE_TIMEOUT = 3
 local FAILURE_THRESHOLD = 3
 local AUTO_DISCOVERY_INTERVAL = 300
 local GATEWAY_PROFILE_NAME = "xiaomi-gateway"
-local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1120"
+local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1121"
 local SERVICES_STARTED_FIELD = "xiaomi_gateway_services_started"
 local CHILD_PARENT_ID_FIELD = "xiaomi_gateway_parent_device_id"
 

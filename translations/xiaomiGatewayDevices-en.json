@@ -1,0 +1,14 @@
+{
+  "tag": "en",
+  "label": "Connected Devices",
+  "attributes": {
+    "connectedDeviceCount": {
+      "label": "Connected device count",
+      "displayTemplate": "{{attribute}}: {{value}}"
+    },
+    "connectedDevices": {
+      "label": "Connected devices",
+      "displayTemplate": "{{attribute}}: {{value}}"
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "tag": "ko-KR",
+  "label": "연결된 장치",
+  "attributes": {
+    "connectedDeviceCount": {
+      "label": "연결된 장치 수",
+      "displayTemplate": "{{attribute}}: {{value}}"
+    },
+    "connectedDevices": {
+      "label": "연결된 장치",
+      "displayTemplate": "{{attribute}}: {{value}}"
+    }
+  }
+}

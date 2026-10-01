@@ -45,6 +45,8 @@ completes, or a BLE child is registered, renamed, or removed. If the complete li
 fit in one state value, omitted devices are shown as `... (+N)`.
 
 The count represents registered children, not the number of devices currently online.
+The inventory uses the dedicated `locketforest19027.connectedDevices` capability.
+On first use, `sync-ui.ps1` creates it and synchronizes translations for both status and inventory views.
 
 ### Xiaomi BLE devices
 

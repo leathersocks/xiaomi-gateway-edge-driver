@@ -23,36 +23,6 @@
         ]
       },
       "enumCommands": []
-    },
-    "connectedDeviceCount": {
-      "schema": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "value"
-        ]
-      }
-    },
-    "connectedDevices": {
-      "schema": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string",
-            "maxLength": 512
-          }
-        },
-        "additionalProperties": false,
-        "required": [
-          "value"
-        ]
-      }
     }
   },
   "commands": {}

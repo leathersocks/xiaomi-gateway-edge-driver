@@ -11,6 +11,8 @@ components:
         - online
         - degraded
         - offline
+  - id: locketforest19027.connectedDevices
+    version: 1
   categories:
   - name: Hub
 preferences:

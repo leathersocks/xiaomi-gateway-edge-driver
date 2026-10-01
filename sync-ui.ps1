@@ -4,11 +4,7 @@ $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
 
-$CapabilityId = "locketforest19027.xiaomiGatewayStatus"
-$ShortId = "xiaomiGatewayStatus"
-
-$Definition = Join-Path $Root "capabilities\$ShortId.json"
-$PresentationTemplate = Join-Path $Root "capabilities\$ShortId-presentation.template.json"
+$Namespace = "locketforest19027"
 
 function Invoke-ST {
   param(
@@ -40,55 +36,75 @@ function Write-Utf8NoBom([string]$Path, [string]$Content) {
 }
 
 Write-Host ""
-Write-Host "=== Gateway-status custom capability UI sync ==="
-Write-Host "Capability: $CapabilityId"
+Write-Host "=== Gateway custom capability UI sync ==="
 Write-Host "Translations and Capability Presentation are SmartThings cloud metadata."
 Write-Host "This sync is required whenever translation or presentation files change."
 Write-Host ""
 
-Invoke-ST `
-  -Description "Updating capability: $CapabilityId" `
-  -Arguments @(
-    "capabilities:update",
-    $CapabilityId,
-    "--capability-version", "1",
-    "-i", $Definition
-  )
+foreach ($ShortId in @("xiaomiGatewayStatus", "xiaomiGatewayDevices")) {
+  $Definition = Join-Path $Root "capabilities\$ShortId.json"
+  $DefinitionData = Get-Content $Definition -Raw -Encoding UTF8 | ConvertFrom-Json
+  $CapabilityId = "$Namespace.$($DefinitionData.id)"
+  $PresentationTemplate = Join-Path $Root "capabilities\$ShortId-presentation.template.json"
+  $SmartThingsCmd = Get-Command smartthings.cmd -ErrorAction SilentlyContinue
+  $SmartThingsExecutable = if ($SmartThingsCmd) { $SmartThingsCmd.Source } else { "smartthings" }
+  $Lookup = & $SmartThingsExecutable capabilities $CapabilityId --capability-version 1 --json 2>&1
+  $LookupExit = $LASTEXITCODE
 
-foreach ($Tag in @("en", "ko", "ko-KR")) {
-  $TranslationFile = Join-Path $Root "translations\$ShortId-$Tag.json"
+  if ($LookupExit -eq 0) {
+    Invoke-ST -Description "Updating capability: $CapabilityId" -Arguments @(
+      "capabilities:update", $CapabilityId, "--capability-version", "1", "-i", $Definition
+    )
+  }
+  elseif ($ShortId -eq "xiaomiGatewayDevices" -and
+          ($Lookup -join "`n") -match 'status (403|404)') {
+    $Created = Invoke-ST -Description "Creating capability: $CapabilityId" -Arguments @(
+      "capabilities:create", "--namespace", $Namespace, "-i", $Definition
+    )
+    $CreatedDefinition = ($Created -join "`n") | ConvertFrom-Json
+    if ($CreatedDefinition.id -ne $CapabilityId) {
+      throw "Created capability ID $($CreatedDefinition.id) does not match $CapabilityId. Check the definition name."
+    }
+  }
+  else {
+    throw "Capability lookup failed for $CapabilityId (exit $LookupExit): $Lookup"
+  }
+
+  foreach ($Tag in @("en", "ko", "ko-KR")) {
+    $TranslationFile = Join-Path $Root "translations\$ShortId-$Tag.json"
+
+    Invoke-ST `
+      -Description "Updating translation [$Tag]: $CapabilityId" `
+      -Arguments @(
+        "capabilities:translations:upsert",
+        $CapabilityId,
+        "--capability-version", "1",
+        "-i", $TranslationFile
+      )
+  }
+
+  $Template = Get-Content $PresentationTemplate -Raw -Encoding UTF8 | ConvertFrom-Json
+  $UpdateBody = [ordered]@{
+    dashboard = $Template.dashboard
+    detailView = $Template.detailView
+    automation = $Template.automation
+  }
+
+  $Temp = Join-Path $env:TEMP "$ShortId-presentation-update.json"
+  Write-Utf8NoBom $Temp ($UpdateBody | ConvertTo-Json -Depth 20)
 
   Invoke-ST `
-    -Description "Updating translation [$Tag]: $CapabilityId" `
+    -Description "Updating presentation: $CapabilityId" `
     -Arguments @(
-      "capabilities:translations:upsert",
+      "capabilities:presentation:update",
       $CapabilityId,
       "--capability-version", "1",
-      "-i", $TranslationFile
+      "-i", $Temp
     )
 }
 
-$Template = Get-Content $PresentationTemplate -Raw | ConvertFrom-Json
-$UpdateBody = [ordered]@{
-  dashboard = $Template.dashboard
-  detailView = $Template.detailView
-  automation = $Template.automation
-}
-
-$Temp = Join-Path $env:TEMP "$ShortId-presentation-update.json"
-Write-Utf8NoBom $Temp ($UpdateBody | ConvertTo-Json -Depth 20)
-
-Invoke-ST `
-  -Description "Updating presentation: $CapabilityId" `
-  -Arguments @(
-    "capabilities:presentation:update",
-    $CapabilityId,
-    "--capability-version", "1",
-    "-i", $Temp
-  )
-
 Write-Host ""
-Write-Host "Gateway-status UI metadata sync completed."
+Write-Host "Gateway status and connected-device UI metadata sync completed."
 Write-Host "Korean locales uploaded: ko, ko-KR"
 Write-Host "Expected values: online=CONNECTED(Korean), degraded=UNSTABLE(Korean), offline=DISCONNECTED(Korean)"
 Write-Host "Expected detail states: connected device count and connected device names"

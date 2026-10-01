@@ -11,6 +11,12 @@
 
 ---
 
+## v1.12.1-connected-devices — 2026-10-01
+
+- Hub 실기기에서 기존 Capability 정의가 캐시되어 새 속성이 누락되는 문제를 확인했습니다.
+- 장치 목록을 전용 `connectedDevices` Capability로 분리해 기존 상태와 장치 ID를 유지하면서 적용합니다.
+- UI 동기화 스크립트가 새 Capability 생성 및 두 Capability의 번역/Presentation 갱신을 처리합니다.
+
 ## v1.12.0-connected-devices — 2026-10-01
 
 - Gateway 상세 화면에 `연결된 장치 수`와 `연결된 장치` 목록을 표시합니다.

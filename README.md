@@ -44,6 +44,8 @@ Zigbee 장치, MQTT 광고로 등록된 BLE 온습도 센서와 T700i가 포함�
 표시할 수 없으면 남은 장치 수를 `... (+N)` 형식으로 표시합니다.
 
 장치 수는 현재 온라인인 장치 수가 아니라 해당 Gateway 아래에 등록된 장치 수입니다.
+목록은 전용 `locketforest19027.connectedDevices` Capability를 사용합니다.
+`sync-ui.ps1`은 최초 실행 시 이 Capability를 생성하고 상태/목록 화면의 번역을 함께 동기화합니다.
 
 ### Xiaomi BLE 장치
 

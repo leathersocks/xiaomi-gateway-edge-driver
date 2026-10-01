@@ -11,6 +11,12 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.12.1-connected-devices — 2026-10-01
+
+- Real-Hub validation found that a cached definition of the existing capability omitted the new attributes.
+- Split the inventory into the dedicated `connectedDevices` capability while preserving gateway status and device IDs.
+- UI synchronization now creates the inventory capability if missing and updates translations/presentations for both capabilities.
+
 ## v1.12.0-connected-devices — 2026-10-01
 
 - Added `Connected device count` and `Connected devices` states to the Gateway

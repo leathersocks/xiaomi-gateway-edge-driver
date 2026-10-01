@@ -1,2 +1,2 @@
-v1.12.0-connected-devices
+v1.12.1-connected-devices
 2026-10-01

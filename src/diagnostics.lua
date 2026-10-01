@@ -106,13 +106,13 @@ function diagnostics.emit_connected_devices(device, excluded_child_id)
 
   emit_cap(
     device,
-    "status",
+    "devices",
     "connectedDeviceCount",
     summary.count
   )
   emit_cap(
     device,
-    "status",
+    "devices",
     "connectedDevices",
     summary.text
   )

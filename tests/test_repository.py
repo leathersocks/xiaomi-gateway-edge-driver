@@ -57,7 +57,7 @@ class RepositoryTests(unittest.TestCase):
 
     def test_gateway_capability_exposes_connected_devices(self):
         definition = json.loads(
-            (ROOT / "capabilities" / "xiaomiGatewayStatus.json").read_text(
+            (ROOT / "capabilities" / "xiaomiGatewayDevices.json").read_text(
                 encoding="utf-8"
             )
         )
@@ -69,7 +69,7 @@ class RepositoryTests(unittest.TestCase):
             (
                 ROOT
                 / "capabilities"
-                / "xiaomiGatewayStatus-presentation.template.json"
+                / "xiaomiGatewayDevices-presentation.template.json"
             ).read_text(encoding="utf-8")
         )
         detail = json.dumps(presentation["detailView"])
@@ -81,12 +81,25 @@ class RepositoryTests(unittest.TestCase):
                 (
                     ROOT
                     / "translations"
-                    / f"xiaomiGatewayStatus-{tag}.json"
+                    / f"xiaomiGatewayDevices-{tag}.json"
                 ).read_text(encoding="utf-8")
             )
             translated = translation["attributes"]
             self.assertIn("connectedDeviceCount", translated)
             self.assertIn("connectedDevices", translated)
+
+        status = json.loads(
+            (ROOT / "capabilities" / "xiaomiGatewayStatus.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        self.assertEqual(set(status["attributes"]), {"gatewayStatus"})
+        profile = yaml.safe_load(
+            (ROOT / "profiles" / "xiaomi-gateway.yml").read_text(encoding="utf-8")
+        )
+        profile_caps = {c["id"] for c in profile["components"][0]["capabilities"]}
+        self.assertIn("locketforest19027." + definition["id"], profile_caps)
+        self.assertEqual(definition["id"], "connectedDevices")
 
     def test_checksum_manifest_entries_are_current(self):
         for line in (ROOT / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
