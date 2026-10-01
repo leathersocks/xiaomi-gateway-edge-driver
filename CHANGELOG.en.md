@@ -17,6 +17,7 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 - The detail layout is `Status → Gateway view → Devices connected to bridge`.
 - Preserved health checks, count/name events, native child cards, and view switching.
 - Refreshed existing gateway profiles for the updated UI without changing device IDs, rooms, parents, or preferences.
+- Explicit view attribute/command values in both profiles generate a fresh Device Presentation instead of reusing the old layout.
 
 ## v1.13.1-native-bridge-view — 2026-10-01
 

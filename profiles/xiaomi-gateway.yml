@@ -15,6 +15,16 @@ components:
     version: 1
   - id: locketforest19027.gatewayView
     version: 1
+    config:
+      values:
+      - key: view.value
+        enabledValues:
+        - bridge
+        - settings
+      - key: setView
+        enabledValues:
+        - bridge
+        - settings
   categories:
   - name: Bridges
 preferences:

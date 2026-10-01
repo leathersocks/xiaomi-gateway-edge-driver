@@ -121,6 +121,18 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(len(view["detailView"]), 1)
         self.assertEqual(view["detailView"][0]["displayType"], "list")
         self.assertEqual(view["detailView"][0]["list"]["command"]["name"], "setView")
+        for profile_name in ("xiaomi-gateway", "xiaomi-gateway-setup"):
+            profile = yaml.safe_load(
+                (ROOT / "profiles" / f"{profile_name}.yml").read_text(encoding="utf-8")
+            )
+            view_cap = next(
+                cap for cap in profile["components"][0]["capabilities"]
+                if cap["id"] == "locketforest19027.gatewayView"
+            )
+            self.assertEqual(view_cap["config"]["values"], [
+                {"key": "view.value", "enabledValues": ["bridge", "settings"]},
+                {"key": "setView", "enabledValues": ["bridge", "settings"]},
+            ])
 
     def test_native_bridge_view_preserves_setup_and_child_identity(self):
         profiles = ROOT / "profiles"
