@@ -62,22 +62,25 @@ IP가 비어 있거나 유효하지 않은 새 Gateway는 `xiaomi-gateway-setup`
 브릿지 프로필로 자동 전환됩니다. 두 프로필의 설정 항목과 Capability는 같습니다.
 
 일부 SmartThings 앱에서는 `Bridges` 분류의 설정 메뉴나 커스텀 상태 화면을
-숨길 수 있습니다. 기존 Gateway의 설정을 편집하려면 CLI로 **사용자 분류만**
-변경합니다. 아래 `<GatewayDeviceId>`는 센서 ID가 아닌 Gateway의 SmartThings ID입니다.
+숨길 수 있습니다. 기존 Gateway의 설정을 편집하려면 전용 `gatewayView:setView`
+명령으로 **설정용 프로필**로 전환합니다. 선택한 화면은 재시작 후에도 유지됩니다.
+아래 `<GatewayDeviceId>`는 센서 ID가 아닌 Gateway의 SmartThings ID입니다.
 
 ```powershell
 Set-Location C:\Git\xiaomi-gateway-edge-driver
-smartthings devices:update <GatewayDeviceId> -i ui/gateway-settings-view.json
+smartthings devices:commands <GatewayDeviceId> -i ui/gateway-settings-view.json
 ```
 
 앱을 다시 열어 설정을 편집한 후 다음 명령으로 브릿지 화면으로 돌아갑니다.
 
 ```powershell
-smartthings devices:update <GatewayDeviceId> -i ui/gateway-bridge-view.json
+smartthings devices:commands <GatewayDeviceId> -i ui/gateway-bridge-view.json
 ```
 
-입력 파일에는 `main`의 분류만 있으며 IP, TOKEN, MQTT 설정, 방, 장치 ID 또는
+일반 화면의 `Gateway 화면` 선택 항목으로도 브릿지 화면으로 돌아갈 수 있습니다.
+입력 파일에는 화면 전환 명령만 있으며 IP, TOKEN, MQTT 설정, 방, 장치 ID 또는
 부모 관계를 변경하지 않습니다. Gateway를 삭제하거나 다시 페어링할 필요가 없습니다.
+단순 `devices:update` 분류 수정은 이 환경에서 성공 응답 후에도 반영되지 않아 사용하지 않습니다.
 
 ### Xiaomi BLE 장치
 

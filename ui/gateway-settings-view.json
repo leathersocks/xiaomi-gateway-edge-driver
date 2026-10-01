@@ -1,8 +1,6 @@
 {
-  "components": [
-    {
-      "id": "main",
-      "categories": ["Hub"]
-    }
-  ]
+  "component": "main",
+  "capability": "locketforest19027.gatewayView",
+  "command": "setView",
+  "arguments": ["settings"]
 }

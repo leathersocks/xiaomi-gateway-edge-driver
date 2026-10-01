@@ -22,7 +22,7 @@ package.preload["miio_probe"] = function()
 end
 package.preload["diagnostics"] = function()
   return {
-    emit_cached = no_op, emit_connected_devices = no_op,
+    emit_cached = no_op, emit_connected_devices = no_op, emit_view = no_op,
     record_success = no_op, record_failure = function() return 1 end,
   }
 end
@@ -41,6 +41,7 @@ end
 
 require "init"
 local lifecycle = captured_driver.lifecycle_handlers
+local set_view = captured_driver.capability_handlers["locketforest19027.gatewayView"].setView
 local updates = {}
 local fields = {}
 local device = {
@@ -75,5 +76,17 @@ device.preferences.gatewayIp = ""
 lifecycle.infoChanged(captured_driver, device)
 assert(updates[3] == "xiaomi-gateway-setup", "clearing IP must restore setup")
 assert(device.id == "existing-gateway-id", "profile switching must preserve identity")
+
+device.preferences.gatewayIp = "192.168.10.41"
+lifecycle.infoChanged(captured_driver, device)
+set_view(captured_driver, device, { args = { view = "settings" } })
+assert(updates[5] == "xiaomi-gateway-setup", "settings command must restore normal UI")
+lifecycle.init(captured_driver, device)
+assert(#updates == 5, "settings mode must survive restart with valid IP")
+set_view(captured_driver, device, { args = { view = "invalid" } })
+assert(#updates == 5, "invalid view commands must be ignored")
+set_view(captured_driver, device, { args = { view = "bridge" } })
+assert(updates[6] == "xiaomi-gateway", "bridge command must restore native UI")
+assert(device.preferences.gatewayIp == "192.168.10.41", "view commands must preserve IP")
 
 print("gateway lifecycle profile-transition tests passed")

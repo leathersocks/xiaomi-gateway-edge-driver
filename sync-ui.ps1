@@ -41,7 +41,7 @@ Write-Host "Translations and Capability Presentation are SmartThings cloud metad
 Write-Host "This sync is required whenever translation or presentation files change."
 Write-Host ""
 
-foreach ($ShortId in @("xiaomiGatewayStatus", "xiaomiGatewayDevices")) {
+foreach ($ShortId in @("xiaomiGatewayStatus", "xiaomiGatewayDevices", "gatewayView")) {
   $Definition = Join-Path $Root "capabilities\$ShortId.json"
   $DefinitionData = Get-Content $Definition -Raw -Encoding UTF8 | ConvertFrom-Json
   $CapabilityId = "$Namespace.$($DefinitionData.id)"
@@ -56,7 +56,7 @@ foreach ($ShortId in @("xiaomiGatewayStatus", "xiaomiGatewayDevices")) {
       "capabilities:update", $CapabilityId, "--capability-version", "1", "-i", $Definition
     )
   }
-  elseif ($ShortId -eq "xiaomiGatewayDevices" -and
+  elseif ($ShortId -in @("xiaomiGatewayDevices", "gatewayView") -and
           ($Lookup -join "`n") -match 'status (403|404)') {
     $Created = Invoke-ST -Description "Creating capability: $CapabilityId" -Arguments @(
       "capabilities:create", "--namespace", $Namespace, "-i", $Definition

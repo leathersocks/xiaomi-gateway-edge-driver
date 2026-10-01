@@ -1,0 +1,20 @@
+{
+  "tag": "en",
+  "label": "Gateway view",
+  "attributes": {
+    "view": {
+      "label": "Gateway view",
+      "displayTemplate": "{{attribute}}: {{value}}",
+      "i18n": {
+        "value": {
+          "bridge": {
+            "label": "Bridge devices"
+          },
+          "settings": {
+            "label": "Gateway settings"
+          }
+        }
+      }
+    }
+  }
+}

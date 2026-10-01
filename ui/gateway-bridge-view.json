@@ -1,8 +1,6 @@
 {
-  "components": [
-    {
-      "id": "main",
-      "categories": ["Bridges"]
-    }
-  ]
+  "component": "main",
+  "capability": "locketforest19027.gatewayView",
+  "command": "setView",
+  "arguments": ["bridge"]
 }

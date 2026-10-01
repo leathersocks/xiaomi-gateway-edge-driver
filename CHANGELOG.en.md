@@ -11,6 +11,13 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.13.1-native-bridge-view — 2026-10-01
+
+- Replaced ineffective `devices:update` category overrides with a dedicated `gatewayView:setView` command that changes the profile in the driver.
+- Settings mode survives restarts; the `bridge` command or normal detail-view selector restores native child navigation.
+- View commands preserve IP/TOKEN/MQTT preferences and device IDs, rooms, and parents.
+- CLI input files now contain device commands, not category-update requests.
+
 ## v1.13.0-native-bridge-view — 2026-10-01
 
 - Classify configured gateways as `Bridges` to use the SmartThings app's native child-device cards and device navigation.

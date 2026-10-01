@@ -61,22 +61,26 @@ New gateways with a missing/invalid IP start with the `xiaomi-gateway-setup` pro
 bridge profile. Both profiles have identical preferences and capabilities.
 
 Some app versions hide settings or custom capability UI for `Bridges` devices.
-To edit an existing gateway, use a CLI **category override only**. Replace
+To edit an existing gateway, use the dedicated `gatewayView:setView` command to
+switch to the **settings profile**. The selection survives driver restarts. Replace
 `<GatewayDeviceId>` with the parent gateway's SmartThings ID, not a sensor ID:
 
 ```powershell
 Set-Location C:\Git\xiaomi-gateway-edge-driver
-smartthings devices:update <GatewayDeviceId> -i ui/gateway-settings-view.json
+smartthings devices:commands <GatewayDeviceId> -i ui/gateway-settings-view.json
 ```
 
 Reopen the app, edit Settings, then return to the native bridge view:
 
 ```powershell
-smartthings devices:update <GatewayDeviceId> -i ui/gateway-bridge-view.json
+smartthings devices:commands <GatewayDeviceId> -i ui/gateway-bridge-view.json
 ```
 
-The input files change only the `main` category; they do not change IP, TOKEN,
+The normal detail view also provides a `Gateway view` selector to return to the bridge.
+The input files contain only view commands; they do not change IP, TOKEN,
 MQTT settings, room, device IDs, or parent relationships. Do not delete/re-pair the gateway.
+Simple `devices:update` category overrides returned success without changing this
+environment's category, so they are not used.
 
 ### Xiaomi BLE devices
 

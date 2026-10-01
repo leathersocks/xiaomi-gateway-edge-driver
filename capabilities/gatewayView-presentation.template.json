@@ -1,0 +1,28 @@
+{
+  "dashboard": { "states": [], "actions": [], "basicPlus": [] },
+  "detailView": [
+    {
+      "label": "{{i18n.label}}",
+      "displayType": "list",
+      "list": {
+        "command": {
+          "name": "setView",
+          "argumentType": "string",
+          "alternatives": [
+            { "key": "bridge", "value": "{{i18n.attributes.view.i18n.value.bridge.label}}", "type": "active" },
+            { "key": "settings", "value": "{{i18n.attributes.view.i18n.value.settings.label}}", "type": "active" }
+          ]
+        },
+        "state": {
+          "value": "view.value",
+          "valueType": "string",
+          "alternatives": [
+            { "key": "bridge", "value": "{{i18n.attributes.view.i18n.value.bridge.label}}", "type": "active" },
+            { "key": "settings", "value": "{{i18n.attributes.view.i18n.value.settings.label}}", "type": "active" }
+          ]
+        }
+      }
+    }
+  ],
+  "automation": { "conditions": [], "actions": [] }
+}

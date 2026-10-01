@@ -127,6 +127,10 @@ function diagnostics.emit_connected_devices(device, excluded_child_id)
   return summary
 end
 
+function diagnostics.emit_view(device, view)
+  emit_cap(device, "view", "view", view)
+end
+
 function diagnostics.emit_cached(device, ip)
   local value = device:get_field(FIELD_GATEWAY_STATUS)
   local status = value == nil and "offline" or tostring(value)

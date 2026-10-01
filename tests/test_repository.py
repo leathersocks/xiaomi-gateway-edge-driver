@@ -122,13 +122,32 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn('type = "EDGE_CHILD"', manager)
         self.assertIn("parent_device_id = parent.id", manager)
 
-        for view, category in (("settings", "Hub"), ("bridge", "Bridges")):
+        for view in ("settings", "bridge"):
             payload = json.loads(
                 (ROOT / "ui" / f"gateway-{view}-view.json").read_text(encoding="utf-8")
             )
             self.assertEqual(payload, {
-                "components": [{"id": "main", "categories": [category]}]
+                "component": "main", "capability": "locketforest19027.gatewayView",
+                "command": "setView", "arguments": [view],
             })
+
+        definition = json.loads(
+            (ROOT / "capabilities" / "gatewayView.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            definition["commands"]["setView"]["arguments"][0]["schema"]["enum"],
+            ["bridge", "settings"],
+        )
+        for tag in ("en", "ko", "ko-KR"):
+            translation = json.loads(
+                (ROOT / "translations" / f"gatewayView-{tag}.json").read_text(
+                    encoding="utf-8"
+                )
+            )
+            self.assertEqual(
+                set(translation["attributes"]["view"]["i18n"]["value"]),
+                {"bridge", "settings"},
+            )
 
     def test_checksum_manifest_entries_are_current(self):
         for line in (ROOT / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():

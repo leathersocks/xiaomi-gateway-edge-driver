@@ -1,2 +1,2 @@
-v1.13.0-native-bridge-view
+v1.13.1-native-bridge-view
 2026-10-01

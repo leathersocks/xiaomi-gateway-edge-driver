@@ -1,0 +1,30 @@
+{
+  "id": "gatewayView",
+  "version": 1,
+  "status": "proposed",
+  "name": "Gateway View",
+  "attributes": {
+    "view": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "value": { "type": "string", "enum": ["bridge", "settings"] }
+        },
+        "additionalProperties": false,
+        "required": ["value"]
+      }
+    }
+  },
+  "commands": {
+    "setView": {
+      "name": "setView",
+      "arguments": [
+        {
+          "name": "view",
+          "optional": false,
+          "schema": { "type": "string", "enum": ["bridge", "settings"] }
+        }
+      ]
+    }
+  }
+}

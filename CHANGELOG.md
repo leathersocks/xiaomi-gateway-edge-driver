@@ -11,6 +11,13 @@
 
 ---
 
+## v1.13.1-native-bridge-view — 2026-10-01
+
+- 실환경에서 `devices:update` 분류 수정이 반영되지 않아, `gatewayView:setView` 전용 명령으로 드라이버가 프로필을 직접 전환하도록 수정했습니다.
+- `settings` 모드는 재시작 후에도 유지되고, `bridge` 명령 또는 일반 화면의 선택 항목으로 기본 연결 장치 화면에 복귀할 수 있습니다.
+- 화면 전환 명령은 IP/TOKEN/MQTT 설정과 장치 ID·방·부모 관계를 변경하지 않습니다.
+- CLI 입력 파일은 분류 변경 요청이 아닌 장치 명령으로 교체했습니다.
+
 ## v1.13.0-native-bridge-view — 2026-10-01
 
 - Gateway를 `Bridges` 분류로 표시해 SmartThings 앱의 기본 연결 장치 카드와 장치 화면 이동을 사용합니다.

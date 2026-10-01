@@ -13,6 +13,8 @@ components:
         - offline
   - id: locketforest19027.connectedDevices
     version: 1
+  - id: locketforest19027.gatewayView
+    version: 1
   categories:
   - name: Bridges
 preferences:
