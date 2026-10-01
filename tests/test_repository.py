@@ -101,6 +101,35 @@ class RepositoryTests(unittest.TestCase):
         self.assertIn("locketforest19027." + definition["id"], profile_caps)
         self.assertEqual(definition["id"], "connectedDevices")
 
+    def test_native_bridge_view_preserves_setup_and_child_identity(self):
+        profiles = ROOT / "profiles"
+        bridge = yaml.safe_load(
+            (profiles / "xiaomi-gateway.yml").read_text(encoding="utf-8")
+        )
+        setup = yaml.safe_load(
+            (profiles / "xiaomi-gateway-setup.yml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(bridge["components"][0]["categories"], [{"name": "Bridges"}])
+        self.assertEqual(setup["components"][0]["categories"], [{"name": "Hub"}])
+        self.assertEqual(bridge["preferences"], setup["preferences"])
+        self.assertEqual(
+            bridge["components"][0]["capabilities"],
+            setup["components"][0]["capabilities"],
+        )
+        discovery = (ROOT / "src" / "discovery.lua").read_text(encoding="utf-8")
+        self.assertIn('profile = "xiaomi-gateway-setup"', discovery)
+        manager = (ROOT / "src" / "child_manager.lua").read_text(encoding="utf-8")
+        self.assertIn('type = "EDGE_CHILD"', manager)
+        self.assertIn("parent_device_id = parent.id", manager)
+
+        for view, category in (("settings", "Hub"), ("bridge", "Bridges")):
+            payload = json.loads(
+                (ROOT / "ui" / f"gateway-{view}-view.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(payload, {
+                "components": [{"id": "main", "categories": [category]}]
+            })
+
     def test_checksum_manifest_entries_are_current(self):
         for line in (ROOT / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines():
             if not line.strip():

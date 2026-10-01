@@ -15,7 +15,8 @@ local PROBE_TIMEOUT = 3
 local FAILURE_THRESHOLD = 3
 local AUTO_DISCOVERY_INTERVAL = 300
 local GATEWAY_PROFILE_NAME = "xiaomi-gateway"
-local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1121"
+local GATEWAY_SETUP_PROFILE_NAME = "xiaomi-gateway-setup"
+local GATEWAY_PROFILE_REFRESH_FIELD = "xiaomi_gateway_profile_refresh_v1130"
 local SERVICES_STARTED_FIELD = "xiaomi_gateway_services_started"
 local CHILD_PARENT_ID_FIELD = "xiaomi_gateway_parent_device_id"
 
@@ -24,14 +25,20 @@ local function is_gateway_device(device)
 end
 
 local function refresh_gateway_profile(device)
+  -- Unconfigured gateways need the normal Settings UI before switching to
+  -- the app-owned Bridges view. Category overrides can restore Settings
+  -- later without changing preferences, device IDs, or parent relationships.
+  local profile_name =
+    miio_probe.valid_ipv4(gateway_runtime.gateway_ip(device)) and
+    GATEWAY_PROFILE_NAME or GATEWAY_SETUP_PROFILE_NAME
   local refreshed = device:get_field(GATEWAY_PROFILE_REFRESH_FIELD)
-  if refreshed == true then
+  if refreshed == profile_name then
     return false
   end
 
   local ok, err = pcall(function()
     device:try_update_metadata({
-      profile = GATEWAY_PROFILE_NAME,
+      profile = profile_name,
     })
   end)
 
@@ -39,7 +46,7 @@ local function refresh_gateway_profile(device)
     log.warn(string.format(
       "%s gateway profile refresh failed: profile=%s reason=%s",
       tostring(device.label or device.id),
-      GATEWAY_PROFILE_NAME,
+      profile_name,
       tostring(err)
     ))
     return false
@@ -47,14 +54,14 @@ local function refresh_gateway_profile(device)
 
   device:set_field(
     GATEWAY_PROFILE_REFRESH_FIELD,
-    true,
+    profile_name,
     { persist = true }
   )
 
   log.info(string.format(
-    "%s gateway profile refresh requested: profile=%s reason=presentation-i18n-refresh",
+    "%s gateway profile refresh requested: profile=%s reason=native-bridge-view",
     tostring(device.label or device.id),
-    GATEWAY_PROFILE_NAME
+    profile_name
   ))
 
   return true
@@ -416,6 +423,7 @@ local function info_changed_handler(driver, device, event, args)
     return
   end
 
+  refresh_gateway_profile(device)
   log_configuration(device)
   diagnostics.emit_cached(device, get_ip(device))
   start_services(driver, device, "infoChanged", true)

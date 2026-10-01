@@ -61,7 +61,7 @@ function discovery.start(driver, options, should_continue)
     type = "LAN",
     device_network_id = dni,
     label = "Xiaomi Gateway",
-    profile = "xiaomi-gateway",
+    profile = "xiaomi-gateway-setup",
     manufacturer = "Xiaomi",
     model = "dynamic-miio-gateway",
     vendor_provided_label = "Xiaomi Gateway",

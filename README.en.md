@@ -35,18 +35,48 @@ The following Xiaomi Gateways have been verified in an actual SmartThings Hub en
 
 #### Connected-device display
 
-The Gateway detail view shows the number and name/model list of SmartThings
-`EDGE_CHILD` devices registered by this driver under that Gateway. This includes
-automatically discovered Zigbee devices and BLE temperature/humidity sensors or
-T700i toothbrushes registered from MQTT advertisements.
+Configured gateways use SmartThings' `Bridges` category. The app's native
+**Devices connected to bridge** view displays their `EDGE_CHILD` devices as
+icons/names and provides navigation to each child's detail screen. The app
+groups children by their SmartThings rooms, not Xiaomi/Mi Home room names.
+This includes discovered Zigbee devices, BLE temperature/humidity sensors, and T700i.
 
-The list refreshes when the Gateway or a child initializes, automatic discovery
-completes, or a BLE child is registered, renamed, or removed. If the complete list does not
-fit in one state value, omitted devices are shown as `... (+N)`.
+Existing device IDs and parent relationships are preserved. This is a **LAN
+bridge UI category**, not a conversion to Matter or a way to add the Matter logo.
+Card layout and tap navigation are app-owned and need confirmation on the installed
+phone app version. The [official Hue LAN bridge profile](https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers/blob/main/drivers/SmartThings/philips-hue/profiles/hue-bridge.yml) uses the same category.
+
+The count/name summary capability remains available for API queries and the normal
+detail view. It refreshes after initialization, discovery, registration, renaming,
+and removal, abbreviating long lists as `... (+N)`. The summary text itself is not a link.
 
 The count represents registered children, not the number of devices currently online.
 The inventory uses the dedicated `locketforest19027.connectedDevices` capability.
 On first use, `sync-ui.ps1` creates it and synchronizes translations for both status and inventory views.
+
+#### Restoring the settings view
+
+New gateways with a missing/invalid IP start with the `xiaomi-gateway-setup` profile
+(`Hub` category) so Settings remains accessible. Saving a valid IP switches to the
+bridge profile. Both profiles have identical preferences and capabilities.
+
+Some app versions hide settings or custom capability UI for `Bridges` devices.
+To edit an existing gateway, use a CLI **category override only**. Replace
+`<GatewayDeviceId>` with the parent gateway's SmartThings ID, not a sensor ID:
+
+```powershell
+Set-Location C:\Git\xiaomi-gateway-edge-driver
+smartthings devices:update <GatewayDeviceId> -i ui/gateway-settings-view.json
+```
+
+Reopen the app, edit Settings, then return to the native bridge view:
+
+```powershell
+smartthings devices:update <GatewayDeviceId> -i ui/gateway-bridge-view.json
+```
+
+The input files change only the `main` category; they do not change IP, TOKEN,
+MQTT settings, room, device IDs, or parent relationships. Do not delete/re-pair the gateway.
 
 ### Xiaomi BLE devices
 

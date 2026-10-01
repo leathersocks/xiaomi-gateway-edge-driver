@@ -1,2 +1,2 @@
-v1.12.1-connected-devices
+v1.13.0-native-bridge-view
 2026-10-01

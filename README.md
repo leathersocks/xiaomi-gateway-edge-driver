@@ -35,17 +35,49 @@ Xiaomi Gateway를 SmartThings Hub에 **LAN 장치로 등록**하고, Gateway 상
 
 #### 연결된 장치 표시
 
-Gateway 장치의 상세 화면에는 이 드라이버가 해당 Gateway 아래에 등록한
-SmartThings `EDGE_CHILD` 장치 수와 이름/모델 목록이 표시됩니다. 자동 검색된
-Zigbee 장치, MQTT 광고로 등록된 BLE 온습도 센서와 T700i가 포함됩니다.
+유효한 IP가 설정된 Gateway는 SmartThings의 `Bridges` 분류를 사용합니다.
+앱의 기본 **브릿지에 연결된 기기** 화면에서 해당 Gateway 아래의 `EDGE_CHILD`
+장치를 아이콘과 이름으로 표시하고, 장치를 누르면 그 장치의 상세 화면으로
+이동하는 방식을 사용합니다. 방별 묶음은 SmartThings에서 자식 장치에 지정한
+방을 기준으로 앱이 처리합니다. 자동 검색된 Zigbee 장치, MQTT 광고로 등록된
+BLE 온습도 센서와 T700i가 포함됩니다.
 
-목록은 Gateway 또는 자식 장치가 초기화되거나, 자동 검색이 완료되거나, BLE
-자식이 등록되거나 이름이 변경되거나 삭제될 때 자동으로 갱신됩니다. 장치가 많아 한 화면에 모두
-표시할 수 없으면 남은 장치 수를 `... (+N)` 형식으로 표시합니다.
+기존 센서/칫솔 ID와 부모 관계는 변경하지 않습니다. 이 설정은 **LAN 브릿지의
+화면 분류**이며 Matter 장치로 바꾸거나 Matter 로고를 추가하는 기능이 아닙니다.
+실제 카드 배치와 탭 이동은 SmartThings 앱이 구현하므로, 앱 버전별로 휴대폰에서
+확인해야 합니다. [공식 Hue LAN 브릿지 프로필](https://github.com/SmartThingsCommunity/SmartThingsEdgeDrivers/blob/main/drivers/SmartThings/philips-hue/profiles/hue-bridge.yml)도 같은 분류를 사용합니다.
+
+기존 장치 수/이름 요약 Capability도 API 조회와 일반 상세 화면용으로 유지합니다.
+요약은 초기화·검색·등록·이름 변경·삭제 시 갱신되며, 긴 목록은 `... (+N)`으로
+줄여 표시합니다. 이 텍스트 자체에 링크를 넣는 방식은 사용하지 않습니다.
 
 장치 수는 현재 온라인인 장치 수가 아니라 해당 Gateway 아래에 등록된 장치 수입니다.
 목록은 전용 `locketforest19027.connectedDevices` Capability를 사용합니다.
 `sync-ui.ps1`은 최초 실행 시 이 Capability를 생성하고 상태/목록 화면의 번역을 함께 동기화합니다.
+
+#### 브릿지 설정 메뉴가 보이지 않을 때
+
+IP가 비어 있거나 유효하지 않은 새 Gateway는 `xiaomi-gateway-setup` (`Hub` 분류)
+프로필로 만들어져 처음부터 설정을 입력할 수 있습니다. 유효한 IP를 저장하면
+브릿지 프로필로 자동 전환됩니다. 두 프로필의 설정 항목과 Capability는 같습니다.
+
+일부 SmartThings 앱에서는 `Bridges` 분류의 설정 메뉴나 커스텀 상태 화면을
+숨길 수 있습니다. 기존 Gateway의 설정을 편집하려면 CLI로 **사용자 분류만**
+변경합니다. 아래 `<GatewayDeviceId>`는 센서 ID가 아닌 Gateway의 SmartThings ID입니다.
+
+```powershell
+Set-Location C:\Git\xiaomi-gateway-edge-driver
+smartthings devices:update <GatewayDeviceId> -i ui/gateway-settings-view.json
+```
+
+앱을 다시 열어 설정을 편집한 후 다음 명령으로 브릿지 화면으로 돌아갑니다.
+
+```powershell
+smartthings devices:update <GatewayDeviceId> -i ui/gateway-bridge-view.json
+```
+
+입력 파일에는 `main`의 분류만 있으며 IP, TOKEN, MQTT 설정, 방, 장치 ID 또는
+부모 관계를 변경하지 않습니다. Gateway를 삭제하거나 다시 페어링할 필요가 없습니다.
 
 ### Xiaomi BLE 장치
 

@@ -11,6 +11,14 @@ This document records the major changes to **Xiaomi Gateway Edge Driver** from t
 
 ---
 
+## v1.13.0-native-bridge-view — 2026-10-01
+
+- Classify configured gateways as `Bridges` to use the SmartThings app's native child-device cards and device navigation.
+- Preserve existing `EDGE_CHILD` IDs and parents; room grouping, icons, and navigation are app-owned. This does not convert the gateway to Matter.
+- Unconfigured/invalid-IP gateways use a `Hub` setup profile, switching to the bridge profile after a valid IP is saved.
+- Both profiles share capabilities and preferences; CLI category-override input files restore the settings view or bridge view.
+- On-phone rendering and tap navigation still require confirmation for the installed app version.
+
 ## v1.12.1-connected-devices — 2026-10-01
 
 - Real-Hub validation found that a cached definition of the existing capability omitted the new attributes.
